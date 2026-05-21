@@ -1,5 +1,6 @@
 package com.adudasena.mmsystem.dto;
 
+import com.adudasena.mmsystem.model.Produto;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,5 +16,5 @@ public class ProdutoDTO {
     private List<String> tamanhosSelecionados;
     private Map<String, Integer> estoqueDetalhado;
     private List<String> fotos;
-    private String status;
+    private Produto.Status status;
 }

@@ -38,6 +38,12 @@ public class Produto {
     @Column(name = "fotos", columnDefinition = "TEXT")
     private String fotos;
 
-    private String status;
+    public enum Status {
+        ATIVO, EM_CONDICIONAL, VENDIDO
+    }
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Status status = Produto.Status.ATIVO;
 }
 
