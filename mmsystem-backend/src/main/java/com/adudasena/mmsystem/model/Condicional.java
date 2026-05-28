@@ -16,6 +16,10 @@ public class Condicional {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "fk_cliente_id", nullable = false)
+    private Cliente cliente;
+
     @Column(name = "data_saida", nullable = false)
     private LocalDate dataSaida;
 
@@ -23,12 +27,11 @@ public class Condicional {
     private LocalDate dataRetorno;
 
     @Column(nullable = false)
-    private String status = "Aberta";
+    private String status = "ABERTA";
 
-    @Column(name = "valor_total", precision = 38, scale = 2)
-    private BigDecimal valorTotal;
+    @Column(name = "valor_total", nullable = false)
+    private BigDecimal valorTotal = BigDecimal.ZERO;
 
     @OneToMany(mappedBy = "condicional", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ItemCondicional> itens = new ArrayList<>();
 }
-

@@ -1,0 +1,52 @@
+package com.adudasena.mmsystem.controller;
+
+import com.adudasena.mmsystem.dto.CondicionalDTO;
+import com.adudasena.mmsystem.model.Condicional;
+import com.adudasena.mmsystem.service.CondicionalService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/condicionais")
+@CrossOrigin("*")
+public class CondicionalController {
+
+    @Autowired
+    private CondicionalService service;
+
+    @GetMapping
+    public List<Condicional> listar() {
+        return service.listarTodos();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Condicional> buscarPorId(@PathVariable Long id) {
+        return ResponseEntity.ok(service.buscarPorId(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<Condicional> criar(@RequestBody CondicionalDTO dto) {
+        return ResponseEntity.status(201).body(service.criar(dto));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Condicional> atualizar(@PathVariable Long id,
+                                                 @RequestBody CondicionalDTO dto) {
+        return ResponseEntity.ok(service.atualizar(id, dto));
+    }
+
+    // Ajustado para receber o DTO com a lista vinda do Front-end
+    @PutMapping("/{id}/finalizar")
+    public ResponseEntity<Condicional> finalizar(@PathVariable Long id,
+                                                 @RequestBody CondicionalDTO dto) {
+        return ResponseEntity.ok(service.finalizar(id, dto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable Long id) {
+        service.excluir(id);
+        return ResponseEntity.noContent().build();
+    }
+}

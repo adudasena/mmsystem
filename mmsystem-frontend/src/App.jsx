@@ -1,9 +1,9 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import MenuLateral from './components/MenuLateral';
-import TelaProdutos from './pages/TelaProdutos'; // Esse é o que vale!
+import TelaProdutos from './pages/TelaProdutos'; 
+import TelaCondicionais from './pages/TelaCondicionais'; // ◄ Importação adicionada aqui!
 
-// Mantendo o Painel Geral simples
 const PainelGeral = () => (
   <h2 className="text-2xl font-bold text-gray-800">Bem-vinda, Proprietária! 👋</h2>
 );
@@ -21,6 +21,9 @@ function App() {
             
             {/* Rota da tela de produtos da pasta pages */}
             <Route path="/produtos" element={<TelaProdutos />} />
+
+            {/* Rota da tela de condicionais */}
+            <Route path="/condicionais" element={<TelaCondicionais />} />
           </Routes>
         </main>
       </div>

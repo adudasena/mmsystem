@@ -48,7 +48,13 @@ public class ProdutoService {
         produto.setDescricao(dto.getDescricao());
         produto.setPreco(dto.getPreco());
         produto.setCategoria(dto.getCategoria());
-        produto.setStatus(dto.getStatus() == null ? Produto.Status.ATIVO : dto.getStatus());
+
+        //  Se não vier status do DTO, ele nasce como "DISPONIVEL" em String pura
+        if (dto.getStatus() != null) {
+            produto.setStatus(dto.getStatus().toUpperCase());
+        } else {
+            produto.setStatus("DISPONIVEL");
+        }
         produto.setCoresSelecionadas(objectMapper.writeValueAsString(dto.getCoresSelecionadas()));
         produto.setTamanhosSelecionados(objectMapper.writeValueAsString(dto.getTamanhosSelecionados()));
         produto.setEstoqueDetalhado(objectMapper.writeValueAsString(dto.getEstoqueDetalhado()));

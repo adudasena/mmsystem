@@ -4,6 +4,7 @@ import com.adudasena.mmsystem.dto.ProdutoDTO;
 import com.adudasena.mmsystem.model.Produto;
 import com.adudasena.mmsystem.service.ProdutoService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,12 +29,12 @@ public class ProdutoController {
     }
 
     @PostMapping
-    public ResponseEntity<Produto> salvar(@RequestBody ProdutoDTO dto) throws JsonProcessingException {
+    public ResponseEntity<Produto> salvar(@Valid @RequestBody ProdutoDTO dto) throws JsonProcessingException {
         return ResponseEntity.ok(service.salvar(dto));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Produto> editar(@PathVariable Long id, @RequestBody ProdutoDTO dto) throws JsonProcessingException {
+    public ResponseEntity<Produto> editar(@Valid @PathVariable Long id, @RequestBody ProdutoDTO dto) throws JsonProcessingException {
         return ResponseEntity.ok(service.atualizar(id, dto));
     }
 
