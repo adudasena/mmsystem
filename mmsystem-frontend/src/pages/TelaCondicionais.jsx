@@ -20,18 +20,14 @@ const TelaCondicionais = () => {
   const [mensagemSucesso, setMensagemSucesso] = useState('');
   const [editandoId, setEditandoId] = useState(null);
 
-  // Formulário estruturado com suporte nativo a grades de variação
+  // FORMULÁRIO: Sincronizado com o DTO do ecossistema Java
   const [formCondicional, setFormCondicional] = useState({
     clienteId: '',
     dataSaida: new Date().toISOString().split('T')[0],
     dataRetorno: '',
     status: 'ABERTA',
-    itens: [{ produtoId: '', quantidade: 1, cor: '', tamanho: '', statusItem: 'EM CONDICIONAL' }]
+    itens: [{ produtoId: '', quantidade: 1, corEscolhida: '', tamanhoEscolhido: '', statusItem: 'EM_CONDICIONAL' }]
   });
-
-  // Valores padrão para escolha rápida baseados no padrão visual do MM System
-  const tamanhosDisponiveis = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2'];
-  const coresDisponiveis = ['Preto', 'Branco', 'Rosa', 'Azul', 'Verde', 'Vermelho', 'Laranja', 'Amarelo', 'Roxo'];
 
   const carregarDadosDoSistema = async () => {
     try {
@@ -58,7 +54,7 @@ const TelaCondicionais = () => {
       dataSaida: new Date().toISOString().split('T')[0],
       dataRetorno: '',
       status: 'ABERTA',
-      itens: [{ produtoId: '', quantidade: 1, cor: 'Preto', tamanho: 'M', statusItem: 'EM CONDICIONAL' }]
+      itens: [{ produtoId: '', quantidade: 1, corEscolhida: '', tamanhoEscolhido: '', statusItem: 'EM_CONDICIONAL' }]
     });
     setModalFormAberto(true);
   };
@@ -74,24 +70,59 @@ const TelaCondicionais = () => {
       itens: cond.itens.map(it => ({
         produtoId: it.produto?.id || '',
         quantidade: it.quantidade || 1,
-        cor: it.cor || 'Preto',
-        tamanho: it.tamanho || 'M',
-        statusItem: it.statusItem || 'EM CONDICIONAL'
+        corEscolhida: it.corEscolhida || '',
+        tamanhoEscolhido: it.tamanhoEscolhido || '',
+        statusItem: it.statusItem || 'EM_CONDICIONAL'
       }))
     });
     setModalFormAberto(true);
   };
 
+  // Abre a triagem individual de baixa e define o padrão inicial como DEVOLVIDO
+  const prepararBaixaIndividual = (sacola) => {
+    if (!sacola || !sacola.itens) {
+      console.error("Sacola inválida ou sem itens.");
+      return;
+    }
+    setSacolaParaBaixa(sacola);
+    setItensBaixa(sacola.itens.map(it => ({
+      id: it.id, // ID do item_condicional para o JPA persistir corretamente
+      produtoId: it.produto?.id,
+      nome: it.produto?.nome || 'Produto não identificado',
+      corEscolhida: it.corEscolhida || 'Padrão',
+      tamanhoEscolhido: it.tamanhoEscolhido || 'M',
+      quantidade: it.quantidade || 1,
+      statusItem: 'DEVOLVIDA' // Padrão seguro inicial para reabastecer o estoque
+    })));
+    setModalBaixaAberto(true);
+  };
+
+  // Altera o status de um item específico dentro do modal de baixa (VENDIDO / DEVOLVIDA)
+  const handleStatusBaixaChange = (index, novoStatus) => {
+    const novosItens = [...itensBaixa];
+    novosItens[index].statusItem = novoStatus;
+    setItensBaixa(novosItens);
+  };
+
   const handleItemChange = (index, campo, valor) => {
     const novosItens = [...formCondicional.itens];
     novosItens[index][campo] = valor;
+
+    if (campo === 'produtoId') {
+      novosItens[index]['corEscolhida'] = '';
+      novosItens[index]['tamanhoEscolhido'] = '';
+    }
+    if (campo === 'corEscolhida') {
+      novosItens[index]['tamanhoEscolhido'] = '';
+    }
+
     setFormCondicional({ ...formCondicional, itens: novosItens });
   };
 
   const adicionarLinhaProduto = () => {
     setFormCondicional({
       ...formCondicional,
-      itens: [...formCondicional.itens, { produtoId: '', quantidade: 1, cor: 'Preto', tamanho: 'M', statusItem: 'EM CONDICIONAL' }]
+      itens: [...formCondicional.itens, { produtoId: '', quantidade: 1, corEscolhida: '', tamanhoEscolhido: '', statusItem: 'EM_CONDICIONAL' }]
     });
   };
 
@@ -100,11 +131,54 @@ const TelaCondicionais = () => {
     setFormCondicional({ ...formCondicional, itens: filtrados });
   };
 
+  const obterEstoqueDisponivel = (produtoId, cor, tamanho) => {
+    const produto = produtos.find(p => String(p.id) === String(produtoId));
+    if (!produto) return 0;
+    
+    const estoqueBruto = produto.estoque_detalhado || produto.estoqueDetalhado;
+    if (!estoqueBruto) return 0;
+
+    try {
+      const estoque = typeof estoqueBruto === 'string' 
+        ? JSON.parse(estoqueBruto) 
+        : estoqueBruto;
+
+      const chave = `${cor}-${tamanho}`;
+      return estoque[chave] !== undefined ? estoque[chave] : 0;
+    } catch (e) {
+      console.error("Erro ao mapear string JSON do estoque detalhado:", e);
+      return 0;
+    }
+  };
+
   const salvarCondicional = async () => {
     if (!formCondicional.clienteId || !formCondicional.dataRetorno) {
       setErrosValidacao(["Vincule um cliente e determine a data limite de devolução."]);
       return;
     }
+
+    const dataIni = new Date(formCondicional.dataSaida);
+    const dataFim = new Date(formCondicional.dataRetorno);
+    const diferencaTempo = dataFim.getTime() - dataIni.getTime();
+    const diferencaDias = diferencaTempo / (1000 * 3600 * 24);
+
+    if (diferencaDias > 30 || diferencaDias < 0) {
+      setErrosValidacao(["Prazo inválido! Verifique o intervalo de datas (Máx 30 dias)."]);
+      return;
+    }
+
+    for (let i = 0; i < formCondicional.itens.length; i++) {
+      const item = formCondicional.itens[i];
+      if (item.produtoId && item.corEscolhida && item.tamanhoEscolhido) {
+        const disponivel = obterEstoqueDisponivel(item.produtoId, item.corEscolhida, item.tamanhoEscolhido);
+        if (Number(item.quantidade) > disponivel) {
+          const prodNome = produtos.find(p => String(p.id) === String(item.produtoId))?.nome || "Produto";
+          setErrosValidacao([`Quantidade indisponível para ${prodNome}. Estoque atual: ${disponivel} pç(s)`]);
+          return;
+        }
+      }
+    }
+
     try {
       if (editandoId) {
         await api.put(`/condicionais/${editandoId}`, formCondicional);
@@ -117,56 +191,8 @@ const TelaCondicionais = () => {
       carregarDadosDoSistema();
       setTimeout(() => setMensagemSucesso(''), 3000);
     } catch (err) {
-      setErrosValidacao(["Erro ao comunicar com a API do Spring Boot."]);
-    }
-  };
-
-  // Prepara o Modal de Processamento Item por Item
-  const prepararBaixaIndividual = (sacola) => {
-    setSacolaParaBaixa(sacola);
-    setItensBaixa(sacola.itens.map(it => ({
-      id: it.id,
-      nome: it.produto?.nome || 'Produto não identificado',
-      cor: it.cor || 'Padrão',
-      tamanho: it.tamanho || 'M',
-      quantidade: it.quantidade || 1,
-      statusItem: 'VENDIDO' // Define uma ação padrão inicial
-    })));
-    setModalBaixaAberto(true);
-  };
-
-  const alterarStatusPecaEspecifica = (idx, novoStatus) => {
-    const itensAtualizados = [...itensBaixa];
-    itensAtualizados[idx].statusItem = novoStatus;
-    setItensBaixa(itensAtualizados);
-  };
-
-  // Envia a resposta final para o banco salvando o destino de cada linha separadamente
-  const finalizarBaixaItemPorItem = async () => {
-    try {
-      const todosDevolvidos = itensBaixa.every(i => i.statusItem === 'DEVOLVIDO');
-      const statusGeralSacola = todosDevolvidos ? 'DEVOLVIDA' : 'FINALIZADA';
-
-      await api.put(`/condicionais/${sacolaParaBaixa.id}`, {
-        clienteId: sacolaParaBaixa.cliente?.id,
-        dataSaida: sacolaParaBaixa.dataSaida,
-        dataRetorno: sacolaParaBaixa.dataRetorno,
-        status: statusGeralSacola,
-        itens: sacolaParaBaixa.itens.map((original, index) => ({
-          produtoId: original.produto?.id,
-          quantidade: original.quantidade,
-          cor: original.cor,
-          tamanho: original.tamanho,
-          statusItem: itensBaixa[index].statusItem
-        }))
-      });
-
-      setModalBaixaAberto(false);
-      setMensagemSucesso("Baixa processada de forma individualizada com sucesso!");
-      carregarDadosDoSistema();
-      setTimeout(() => setMensagemSucesso(''), 4000);
-    } catch (err) {
-      console.error("Erro ao salvar baixa fracionada:", err);
+      const msgErro = err.response?.data?.message || "Erro ao comunicar com a API do Spring Boot.";
+      setErrosValidacao([msgErro]);
     }
   };
 
@@ -177,7 +203,38 @@ const TelaCondicionais = () => {
     carregarDadosDoSistema();
   };
 
-  // Lógica de Separação de Listas (Ativos x Finalizados)
+  // DISPARA A ATUALIZAÇÃO REAL PARA O BACKEND ENVIANDO A SACOLA PARA O HISTÓRICO
+  const finalizarBaixaItemPorItem = async () => {
+    try {
+      // Monta o payload exatamente na estrutura que o seu endpoint Java espera receber para atualizar a sacola e os itens
+      const dadosParaAtualizar = {
+        clienteId: sacolaParaBaixa.cliente?.id,
+        dataSaida: sacolaParaBaixa.dataSaida,
+        dataRetorno: sacolaParaBaixa.dataRetorno,
+        status: 'FINALIZADA', // Altera o status do condicional para ir para o Histórico
+        itens: itensBaixa.map(it => ({
+          id: it.id, 
+          produtoId: it.produtoId,
+          quantidade: it.quantidade,
+          corEscolhida: it.corEscolhida,
+          tamanhoEscolhido: it.tamanhoEscolhido,
+          statusItem: it.statusItem // 'DEVOLVIDA' ou 'VENDIDO'
+        }))
+      };
+
+      await api.put(`/condicionais/${sacolaParaBaixa.id}`, dadosParaAtualizar);
+      
+      setModalBaixaAberto(false);
+      setSacolaParaBaixa(null);
+      setMensagemSucesso("Baixa processada e armazenada no histórico de finalizados!");
+      carregarDadosDoSistema();
+      setTimeout(() => setMensagemSucesso(''), 4000);
+    } catch (err) {
+      console.error("Erro ao finalizar baixa no Spring Boot:", err);
+      alert("Não foi possível salvar o fechamento da sacola. Verifique a conexão com o servidor.");
+    }
+  };
+
   const listaFiltrada = listaCondicionais.filter(c => {
     if (abaAtiva === 'ativas') return c.status === 'ABERTA';
     return c.status === 'FINALIZADA' || c.status === 'DEVOLVIDA';
@@ -254,9 +311,11 @@ const TelaCondicionais = () => {
                     <td className="p-3 border-r border-gray-200 text-gray-600 max-w-[240px]">
                       <div className="space-y-1">
                         {(c.itens || []).map((i, idx) => (
-                          <div key={idx} className="text-[11px] bg-gray-100 p-1 border rounded-sm flex justify-between">
-                            <span>{i.produto?.nome} <strong>({i.cor} / {i.tamanho})</strong></span>
-                            <span className="text-[9px] px-1 font-bold bg-white border uppercase text-gray-500">{i.statusItem || 'EM COND.'}</span>
+                          <div key={idx} className="text-[11px] bg-gray-100 p-1 border rounded-sm flex justify-between items-center">
+                            <span>{i.produto?.nome} <strong>({i.corEscolhida} / {i.tamanhoEscolhido})</strong></span>
+                            <span className={`text-[9px] px-1 font-bold border uppercase ${i.statusItem === 'VENDIDO' ? 'bg-green-100 border-green-300 text-green-800' : i.statusItem === 'DEVOLVIDA' ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-gray-300 text-gray-500'}`}>
+                              {i.statusItem || 'EM COND.'}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -280,7 +339,7 @@ const TelaCondicionais = () => {
         </div>
       </section>
 
-      {/* MODAL: FORMULÁRIO DE CRIAÇÃO E EDIÇÃO COM VARIANTES */}
+      {/* MODAL: FORMULÁRIO DE CRIAÇÃO E EDIÇÃO */}
       {modalFormAberto && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-sm w-full max-w-2xl max-h-[90vh] flex flex-col p-6 shadow-2xl border-t-4 border-[#4a5d33]">
@@ -290,6 +349,12 @@ const TelaCondicionais = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {errosValidacao.length > 0 && (
+                <div className="mb-4 bg-red-50 border-l-4 border-red-600 p-2.5 text-red-900 font-semibold text-xs rounded-sm">
+                  {errosValidacao.map((err, i) => <p key={i}>⚠️ {err}</p>)}
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Selecione o Cliente</label>
                 <select value={formCondicional.clienteId} onChange={e => setFormCondicional({...formCondicional, clienteId: e.target.value})} className="w-full border p-2 bg-gray-50 text-xs outline-none focus:border-gray-400">
@@ -316,34 +381,64 @@ const TelaCondicionais = () => {
                 </div>
 
                 <div className="space-y-2">
-                  {formCondicional.itens.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-1.5 bg-gray-50 p-2 border rounded-sm items-center">
-                      <div className="col-span-5">
-                        <select value={item.produtoId} onChange={e => handleItemChange(idx, 'produtoId', e.target.value)} className="w-full border p-1 bg-white text-xs outline-none">
-                          <option value="">Selecione o Look...</option>
-                          {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                        </select>
+                  {formCondicional.itens.map((item, idx) => {
+                    const produtoSelecionado = produtos.find(p => String(p.id) === String(item.produtoId));
+
+                    let coresDisponiveisNoProduto = [];
+                    if (produtoSelecionado && produtoSelecionado.coresSelecionadas) {
+                      try {
+                        coresDisponiveisNoProduto = typeof produtoSelecionado.coresSelecionadas === 'string' 
+                          ? JSON.parse(produtoSelecionado.coresSelecionadas) 
+                          : produtoSelecionado.coresSelecionadas;
+                      } catch (e) { coresDisponiveisNoProduto = []; }
+                    }
+
+                    let tamanhosDisponiveisNoProduto = [];
+                    const estoqueBruto = produtoSelecionado?.estoque_detalhado || produtoSelecionado?.estoqueDetalhado;
+                    if (produtoSelecionado && estoqueBruto && item.corEscolhida) {
+                      try {
+                        const estoqueObj = typeof estoqueBruto === 'string' ? JSON.parse(estoqueBruto) : estoqueBruto;
+                        tamanhosDisponiveisNoProduto = Object.keys(estoqueObj)
+                          .filter(chave => chave.startsWith(`${item.corEscolhida}-`))
+                          .map(chave => chave.split('-')[1]);
+                      } catch (e) { tamanhosDisponiveisNoProduto = []; }
+                    }
+
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-1.5 bg-gray-50 p-2 border rounded-sm items-center">
+                        <div className="col-span-5">
+                          <select value={item.produtoId} onChange={e => handleItemChange(idx, 'produtoId', e.target.value)} className="w-full border p-1 bg-white text-xs outline-none">
+                            <option value="">Selecione o Look...</option>
+                            {produtos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="col-span-3">
+                          <select value={item.corEscolhida} onChange={e => handleItemChange(idx, 'corEscolhida', e.target.value)} className="w-full border p-1 bg-white text-xs outline-none" disabled={!item.produtoId}>
+                            <option value="">Cor...</option>
+                            {coresDisponiveisNoProduto.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="col-span-2">
+                          <select value={item.tamanhoEscolhido} onChange={e => handleItemChange(idx, 'tamanhoEscolhido', e.target.value)} className="w-full border p-1 bg-white text-xs outline-none" disabled={!item.corEscolhida}>
+                            <option value="">Tam...</option>
+                            {tamanhosDisponiveisNoProduto.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+
+                        <div className="col-span-1">
+                          <input type="number" min="1" value={item.quantidade} onChange={e => handleItemChange(idx, 'quantidade', parseInt(e.target.value) || 1)} className="w-full border p-1 text-center bg-white text-xs" />
+                        </div>
+
+                        <div className="col-span-1 text-center">
+                          {formCondicional.itens.length > 1 && (
+                            <button type="button" onClick={() => removerLinhaProduto(idx)} className="text-red-600 font-bold hover:text-red-800">×</button>
+                          )}
+                        </div>
                       </div>
-                      <div className="col-span-3">
-                        <select value={item.cor} onChange={e => handleItemChange(idx, 'cor', e.target.value)} className="w-full border p-1 bg-white text-xs outline-none">
-                          {coresDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div className="col-span-2">
-                        <select value={item.tamanho} onChange={e => handleItemChange(idx, 'tamanho', e.target.value)} className="w-full border p-1 bg-white text-xs outline-none">
-                          {tamanhosDisponiveis.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                      <div className="col-span-1">
-                        <input type="number" min="1" value={item.quantidade} onChange={e => handleItemChange(idx, 'quantidade', e.target.value)} className="w-full border p-1 text-center bg-white text-xs" />
-                      </div>
-                      <div className="col-span-1 text-center">
-                        {formCondicional.itens.length > 1 && (
-                          <button type="button" onClick={() => removerLinhaProduto(idx)} className="text-red-600 font-bold hover:text-red-800">×</button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -356,7 +451,7 @@ const TelaCondicionais = () => {
         </div>
       )}
 
-      {/* MODAL REFEITO DE TRIAGEM INTERNA ITEM POR ITEM */}
+      {/* MODAL DE TRIAGEM COM SELETOR DE DEVOLUÇÃO / VENDA */}
       {modalBaixaAberto && sacolaParaBaixa && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-[#526442] text-white p-6 shadow-2xl border border-[#3e4c32] max-w-xl w-full rounded-sm">
@@ -368,30 +463,24 @@ const TelaCondicionais = () => {
               <button onClick={() => setModalBaixaAberto(false)} className="text-white/70 hover:text-white text-xl">×</button>
             </div>
 
-            <div className="space-y-2 max-h-64 overflow-y-auto mb-4 pr-1">
+            <div className="space-y-3 max-h-64 overflow-y-auto mb-4 pr-1">
               {itensBaixa.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between bg-[#425235] p-2.5 border border-[#37452c] rounded-sm gap-4">
+                <div key={idx} className="flex items-center justify-between bg-[#425235] p-3 border border-[#37452c] rounded-sm gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold truncate">{item.nome}</p>
-                    <p className="text-[10px] text-gray-300">Grade: <span className="text-amber-300 font-bold">{item.cor} / {item.tamanho}</span> ({item.quantidade}x)</p>
+                    <p className="text-[10px] text-gray-300">Grade: <span className="text-amber-300 font-bold">{item.corEscolhida} / {item.tamanhoEscolhido}</span> ({item.quantidade}x)</p>
                   </div>
                   
-                  {/* Seletores de Estado por Item */}
-                  <div className="flex gap-1 bg-[#4d5e3e] p-1 border border-white/10 rounded-sm">
-                    <button 
-                      type="button"
-                      onClick={() => alterarStatusPecaEspecifica(idx, 'VENDIDO')}
-                      className={`px-3 py-1 text-[9px] font-bold uppercase transition ${item.statusItem === 'VENDIDO' ? 'bg-white text-gray-900' : 'text-white/80 hover:bg-white/10'}`}
+                  {/* SELETOR DE DESTINO DA PEÇA */}
+                  <div className="w-40">
+                    <select
+                      value={item.statusItem}
+                      onChange={(e) => handleStatusBaixaChange(idx, e.target.value)}
+                      className="w-full bg-[#526442] text-white text-xs border border-white/40 p-1.5 rounded-xs outline-none focus:border-white"
                     >
-                      🛍️ Vendido
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => alterarStatusPecaEspecifica(idx, 'DEVOLVIDO')}
-                      className={`px-3 py-1 text-[9px] font-bold uppercase transition ${item.statusItem === 'DEVOLVIDO' ? 'bg-[#425235] text-white border border-white/30' : 'text-white/80 hover:bg-white/10'}`}
-                    >
-                      🔄 Devolvido
-                    </button>
+                      <option value="DEVOLVIDA">🔄 DEVOLVER (Estoque)</option>
+                      <option value="VENDIDO">💰 VENDIDO</option>
+                    </select>
                   </div>
                 </div>
               ))}
@@ -399,7 +488,7 @@ const TelaCondicionais = () => {
 
             <div className="pt-3 border-t border-white/20 flex justify-end gap-2">
               <button onClick={() => setModalBaixaAberto(false)} className="px-4 py-2 text-[10px] font-bold text-white/80 uppercase hover:underline">Fechar</button>
-              <button onClick={finalizarBaixaItemPorItem} className="px-5 py-2 bg-white text-gray-900 text-[10px] font-bold uppercase hover:bg-gray-100 shadow-md">Confirmar Baixa do Estoque</button>
+              <button onClick={finalizarBaixaItemPorItem} className="px-5 py-2 bg-white text-gray-900 text-[10px] font-bold uppercase hover:bg-gray-100 shadow-md transition">Confirmar Baixa do Estoque</button>
             </div>
           </div>
         </div>
@@ -410,7 +499,7 @@ const TelaCondicionais = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white p-5 max-w-xs w-full rounded-sm border-t-4 border-red-600 shadow-2xl">
             <h4 className="font-serif text-base text-red-700 mb-1">⚠️ Excluir Condicional</h4>
-            <p className="text-xs text-gray-600 mb-4">Confirma a remoção permanente deste registro do banco de dados?</p>
+            <p className="text-xs text-gray-600 mb-4">Confirma a remoção permanente deste registro?</p>
             <div className="flex justify-end gap-2 text-[10px] font-bold uppercase">
               <button onClick={() => setModalExcluir({ aberto: false, id: null })} className="px-3 py-1.5 bg-gray-100 text-gray-700">Voltar</button>
               <button onClick={deletarCondicional} className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700">Confirmar</button>

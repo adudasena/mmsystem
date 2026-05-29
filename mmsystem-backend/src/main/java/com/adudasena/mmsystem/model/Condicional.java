@@ -1,5 +1,6 @@
 package com.adudasena.mmsystem.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -10,6 +11,7 @@ import java.util.List;
 @Entity
 @Table(name = "condicionais")
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Condicional {
 
     @Id
