@@ -10,5 +10,14 @@ public class CondicionalDTO {
     private LocalDate dataSaida;
     private LocalDate dataRetorno;
     private String status;
-    private List<ItemCondicionalDTO> itens;
+    private List<ItemSacolaDTO> itens; // Lista usando a classe interna definida abaixo
+
+    @Data
+    public static class ItemSacolaDTO {
+        private Long produtoId;
+        private Integer quantidade;
+        private String corEscolhida;
+        private String tamanhoEscolhido;
+        private String statusItem;
+    }
 }

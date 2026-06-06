@@ -8,6 +8,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -23,11 +25,11 @@ public class ProdutoService {
     private CondicionalRepository condicionalRepository;
 
     public List<Produto> listarTodos() {
-        return repository.findAll();
+        return repository.findByDeletedAtIsNull();
     }
 
     public Produto buscarPorId(Long id) {
-        return repository.findById(id)
+        return repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new RuntimeException("Produto não encontrado com o ID: " + id));
     }
 
@@ -41,18 +43,9 @@ public class ProdutoService {
     }
 
     public void excluir(Long id) {
-        if (!repository.existsById(id)) {
-            throw new RuntimeException("Não é possível deletar: Produto não encontrado");
-        }
-        try {
-            // Remove o produto de qualquer sacola/condicional primeiro para liberar a deleção
-            condicionalRepository.deletarItensPorProdutoId(id);
-
-            // Agora o banco permite deletar
-            repository.deleteById(id);
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao processar a exclusão: " + e.getMessage());
-        }
+        Produto produto = buscarPorId(id);
+        produto.setDeletedAt(LocalDateTime.now()); // Soft Delete aplicado
+        repository.save(produto);
     }
 
     private Produto salvar(Produto produto, ProdutoDTO dto) throws JsonProcessingException {

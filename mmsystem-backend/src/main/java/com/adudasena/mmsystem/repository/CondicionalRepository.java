@@ -7,16 +7,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional; // Verifique esta importação
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface CondicionalRepository extends JpaRepository<Condicional, Long> {
-
-    List<Condicional> findByStatus(String status);
-    List<Condicional> findByClienteId(Long clienteId);
-
-    // --- ADICIONE ESTE BLOCO EXATO ABAIXO ---
-    @Modifying
-    @Transactional
-    @Query(value = "DELETE FROM itens_condicional WHERE fk_produto_id = ?1", nativeQuery = true)
-    void deletarItensPorProdutoId(Long produtoId);
+    List<Condicional> findByDeletedAtIsNull();
+    Optional<Condicional> findByIdAndDeletedAtIsNull(Long id);
 }

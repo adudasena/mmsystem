@@ -51,6 +51,10 @@ public class Produto {
     @Transient
     private List<String> tamanhosSelecionados = new ArrayList<>();
 
+    //Soft delete
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
+
     @PostLoad
     public void desserializarListas() {
         ObjectMapper mapper = new ObjectMapper();

@@ -5,6 +5,8 @@ import com.adudasena.mmsystem.model.Cliente;
 import com.adudasena.mmsystem.repository.ClienteRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -37,9 +39,8 @@ public class ClienteService {
     }
 
     public void excluir(Long id) {
-        if (!repository.existsById(id)) {
-            throw new RuntimeException("Cliente não encontrado: " + id);
-        }
-        repository.deleteById(id);
+        Cliente cliente = buscarPorId(id);
+        cliente.setDeletedAt(LocalDateTime.now()); // Soft Delete aplicado
+        repository.save(cliente);
     }
 }

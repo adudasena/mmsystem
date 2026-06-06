@@ -17,4 +17,8 @@ public class Cliente {
 
     @Column(nullable = false, unique = true)
     private String telefone;
+
+    //Soft delete
+    @Column(name = "deleted_at")
+    private java.time.LocalDateTime deletedAt;
 }
