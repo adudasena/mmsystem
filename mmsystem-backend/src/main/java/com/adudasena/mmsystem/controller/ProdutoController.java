@@ -43,4 +43,9 @@ public class ProdutoController {
         service.excluir(id);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/excluidos")
+    public List<Produto> listarExcluidos() {
+        return service.listarExcluidos();
+    }
 }

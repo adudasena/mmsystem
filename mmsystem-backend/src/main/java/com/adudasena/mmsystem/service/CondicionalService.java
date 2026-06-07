@@ -42,7 +42,7 @@ public class CondicionalService {
 
     @Transactional
     public Condicional criar(CondicionalDTO dto) {
-        // Validação de Limite de Data (Máximo 30 dias) - SUA VALIDAÇÃO INTACTA
+        // Validação de Limite de Data (Máximo 30 dias)
         validarPrazoMaximo(dto.getDataSaida(), dto.getDataRetorno());
 
         Cliente cliente = clienteRepository.findById(dto.getClienteId())
@@ -100,7 +100,7 @@ public class CondicionalService {
         boolean possuiVenda = false;
         boolean possuiDevolucao = false;
 
-        // Seu fluxo original de iteração de baixa e comparação - 100% PRESERVADO
+        // Fluxo original de iteração de baixa e comparação
         for (Condicional.ItemItem itemBanco : condicional.getItens()) {
             CondicionalDTO.ItemSacolaDTO itemDto = itensEnviadosPeloFront.stream()
                     .filter(i -> i.getProdutoId().equals(itemBanco.getProduto().getId())
@@ -142,10 +142,6 @@ public class CondicionalService {
         repository.save(condicional);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // SEUS MÉTODOS AUXILIARES ORIGINAIS ADAPTADOS ÀS CLASSES EMBUTIDAS
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void preencherItens(Condicional condicional, List<CondicionalDTO.ItemSacolaDTO> itensDTO) {
         if (itensDTO == null) return;
         for (CondicionalDTO.ItemSacolaDTO itemDTO : itensDTO) {
@@ -180,7 +176,7 @@ public class CondicionalService {
         }
     }
 
-    // SEU MÉTODO ORIGINAL DE ESTOQUE COM MAP DUPLO E VALIDAÇÃO CONTRA NEGATIVOS
+    //  ESTOQUE COM MAP DUPLO E VALIDAÇÃO CONTRA NEGATIVOS
     private void atualizarEstoqueProduto(Produto produto, String cor, String tamanho, int qtdVendida) {
         try {
             String jsonEstoque = produto.getEstoqueDetalhado();

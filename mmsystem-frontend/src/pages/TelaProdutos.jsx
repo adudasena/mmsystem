@@ -48,6 +48,10 @@ const TelaProdutos = () => {
   const [categorias, setCategorias] = useState(() => lerStorage('mm_categorias', CATEGORIAS_PADRAO));
   const [listaCores, setListaCores] = useState(() => lerStorage('mm_cores', CORES_PADRAO));
 
+    // ─── Para visualizar os produtos excluídos- lixeira ───────────────────
+const [produtosExcluidos, setProdutosExcluidos] = useState([]);
+const [visualizandoExcluidos, setVisualizandoExcluidos] = useState(false);
+
   // ─── Busca produtos ───────────────────────────────────────────────────────
   const buscarProdutos = async () => {
     try {
@@ -245,10 +249,15 @@ const TelaProdutos = () => {
       buscarProdutos();
       setTimeout(() => setMensagemSucesso(''), 5000);
     } catch (erro) {
-      const msg = erro.response?.data?.erro
-        || 'Não foi possível excluir. O produto pode estar vinculado a um condicional ativo.';
-      setErrosValidacao([msg]);
-      setModalExcluir({ aberto: false, id: null });
+      // Sincronizado para pegar o .message padrão do Spring Boot
+      const msg = erro.response?.data?.message 
+        || 'Não foi possível excluir o produto. Verifique se ele possui vínculos ativos.';
+      
+      setErrosValidacao([msg]); // Joga o aviso no topo do formulário/página
+      setModalExcluir({ aberto: false, id: null }); // Fecha o modal de confirmação de forma limpa
+      
+      // Opcional: Garante que o erro saia da tela depois de alguns segundos
+      setTimeout(() => setErrosValidacao([]), 6000);
     }
   };
 
@@ -280,6 +289,15 @@ const TelaProdutos = () => {
     if (valor.length <= 8) setProduto({ ...produto, preco: valor });
   };
 
+  // ─── Toggle visualização de excluídos ─────────────────────────────────────
+  const buscarExcluidos = async () => {
+  try {
+    const res = await api.get('/produtos/excluidos');
+    setProdutosExcluidos(res.data);
+  } catch (erro) {
+    console.error("Erro ao carregar produtos excluídos", erro);
+  }
+};
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 p-10 bg-[#d9d9ce] min-h-screen font-sans text-gray-800 relative">
@@ -491,9 +509,28 @@ const TelaProdutos = () => {
 
       {/* TABELA */}
       <section className="bg-white rounded-sm shadow-sm overflow-hidden border-t-4 border-[#4a5d33] max-w-5xl">
-        <div className="p-4 bg-gray-50 border-b">
-          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">Produtos Cadastrados</h3>
+        
+        {/*Adicionado o botão de excluídos dentro do cabeçalho da tabela */}
+        <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+            {visualizandoExcluidos ? "🗑️ Histórico de Produtos Removidos" : "Produtos Cadastrados"}
+          </h3>
+          
+          <button
+            onClick={() => {
+              if (!visualizandoExcluidos) buscarExcluidos();
+              setVisualizandoExcluidos(!visualizandoExcluidos);
+            }}
+            className={`px-3 py-1 text-[10px] font-bold uppercase rounded-xs transition tracking-wider border ${
+              visualizandoExcluidos 
+                ? 'bg-gray-600 hover:bg-gray-700 text-white border-gray-600' 
+                : 'bg-[#4a5d33] hover:bg-[#3b4b28] text-white border-[#4a5d33]'
+            }`}
+          >
+            {visualizandoExcluidos ? "Voltar aos Ativos" : "Ver Removidos"}
+          </button>
         </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 text-[10px] uppercase text-gray-400 border-b">
@@ -506,43 +543,63 @@ const TelaProdutos = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-xs">
-              {listaProdutos.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-400 italic">Nenhum produto cadastrado.</td>
-                </tr>
-              )}
-              {listaProdutos.map(p => {
-                let totalCalculado = 0;
-                try {
-                  const est = typeof p.estoqueDetalhado === 'string' ? JSON.parse(p.estoqueDetalhado) : p.estoqueDetalhado;
-                  totalCalculado = Object.values(est || {}).reduce((acc, curr) => acc + Number(curr || 0), 0);
-                } catch (e) {}
+              {(() => {
+                // Decide qual array ler baseado no botão da lixeira
+                const dadosExibir = visualizandoExcluidos ? produtosExcluidos : listaProdutos;
 
-                return (
-                  <tr key={p.id} className="hover:bg-gray-50/50">
-                    <td className="p-4">
-                      {(() => {
-                        try {
-                          const f = typeof p.fotos === 'string' ? JSON.parse(p.fotos) : p.fotos;
-                          return <img src={Array.isArray(f) ? f[0] : f} className="w-10 h-10 object-cover rounded border" alt="prod" />;
-                        } catch (e) {
-                          return <div className="w-10 h-10 bg-gray-100 flex items-center justify-center text-gray-300">👗</div>;
-                        }
-                      })()}
-                    </td>
-                    <td className="p-4 font-bold text-gray-800">{p.nome}</td>
-                    <td className="p-4 text-gray-600 font-medium">
-                      R$ {Number(p.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-4 font-bold text-[#4a5d33]">{totalCalculado} un</td>
-                    <td className="p-4 text-right space-x-3">
-                      <button onClick={() => prepararEdicao(p)} className="text-blue-600 hover:underline font-bold">EDITAR</button>
-                      <button onClick={() => setModalExcluir({ aberto: true, id: p.id })} className="text-red-600 hover:underline font-bold">EXCLUIR</button>
-                      <button onClick={() => verDetalhes(p)} className="text-green-700 hover:underline font-bold">DETALHES</button>
-                    </td>
-                  </tr>
-                );
-              })}
+                // Validação de lista vazia dinâmica
+                if (dadosExibir.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-gray-400 italic">
+                        {visualizandoExcluidos ? "Nenhum produto na lixeira." : "Nenhum produto cadastrado."}
+                      </td>
+                    </tr>
+                  );
+                }
+
+                // Renderização das linhas baseada na lista escolhida
+                return dadosExibir.map(p => {
+                  let totalCalculado = 0;
+                  try {
+                    const est = typeof p.estoqueDetalhado === 'string' ? JSON.parse(p.estoqueDetalhado) : p.estoqueDetalhado;
+                    totalCalculado = Object.values(est || {}).reduce((acc, curr) => acc + Number(curr || 0), 0);
+                  } catch (e) {}
+
+                  return (
+                    <tr key={p.id} className="hover:bg-gray-50/50">
+                      <td className="p-4">
+                        {(() => {
+                          try {
+                            const f = typeof p.fotos === 'string' ? JSON.parse(p.fotos) : p.fotos;
+                            return <img src={Array.isArray(f) ? f[0] : f} className="w-10 h-10 object-cover rounded border" alt="prod" />;
+                          } catch (e) {
+                            return <div className="w-10 h-10 bg-gray-100 flex items-center justify-center text-gray-300">👗</div>;
+                          }
+                        })()}
+                      </td>
+                      <td className="p-4 font-bold text-gray-800">{p.nome}</td>
+                      <td className="p-4 text-gray-600 font-medium">
+                        R$ {Number(p.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-4 font-bold text-[#4a5d33]">{totalCalculado} un</td>
+                      <td className="p-4 text-right space-x-3">
+                        {visualizandoExcluidos ? (
+                          <span className="text-[10px] bg-red-50 text-red-600 px-2 py-1 font-bold uppercase rounded-xs border border-red-200">
+                            Inativo / Removido
+                          </span>
+                        ) : (
+                          <>
+                            <button onClick={() => prepararEdicao(p)} className="text-blue-600 hover:underline font-bold">EDITAR</button>
+                            <button onClick={() => setModalExcluir({ aberto: true, id: p.id })} className="text-red-600 hover:underline font-bold">EXCLUIR</button>
+                            <button onClick={() => verDetalhes(p)} className="text-green-700 hover:underline font-bold">DETALHES</button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>

@@ -36,6 +36,7 @@ const TelaCondicionais = () => {
         api.get('/clientes'),
         api.get('/produtos')
       ]);
+      
       if (resCond.data) setListaCondicionais(resCond.data);
       if (resCli.data) setClientes(resCli.data);
       if (resProd.data) setProdutos(resProd.data);
@@ -44,7 +45,9 @@ const TelaCondicionais = () => {
     }
   };
 
-  useEffect(() => { carregarDadosDoSistema(); }, []);
+  useEffect(() => {
+    carregarDadosDoSistema();
+  }, []);
 
   const abrirNovaSacolaForm = () => {
     setEditandoId(null);
@@ -152,11 +155,13 @@ const TelaCondicionais = () => {
   };
 
   const salvarCondicional = async () => {
+    // Validação básica de cabeçalho
     if (!formCondicional.clienteId || !formCondicional.dataRetorno) {
       setErrosValidacao(["Vincule um cliente e determine a data limite de devolução."]);
       return;
     }
 
+    // Validação do prazo em dias
     const dataIni = new Date(formCondicional.dataSaida);
     const dataFim = new Date(formCondicional.dataRetorno);
     const diferencaTempo = dataFim.getTime() - dataIni.getTime();
@@ -167,19 +172,36 @@ const TelaCondicionais = () => {
       return;
     }
 
+    // Validação de itens obrigatórios (Se há itens e se todos têm Cor e Tamanho)
+    if (!formCondicional.itens || formCondicional.itens.length === 0) {
+      setErrosValidacao(["Adicione pelo menos um produto na sacola antes de salvar."]);
+      return;
+    }
+
+    // NOVA VALIDAÇÃO: Bloqueia se algum produto adicionado estiver sem cor ou sem tamanho escolhido
+    const temAtributoIncompleto = formCondicional.itens.some(
+      item => !item.produtoId || !item.corEscolhida || !item.tamanhoEscolhido
+    );
+    
+    if (temAtributoIncompleto) {
+      setErrosValidacao(["Atenção! Selecione a Cor e o Tamanho para todos os produtos adicionados na sacola."]);
+      return;
+    }
+
+    // Validação de quantidade disponível no estoque 
     for (let i = 0; i < formCondicional.itens.length; i++) {
       const item = formCondicional.itens[i];
-      if (item.produtoId && item.corEscolhida && item.tamanhoEscolhido) {
-        const disponivel = obterEstoqueDisponivel(item.produtoId, item.corEscolhida, item.tamanhoEscolhido);
-        if (Number(item.quantidade) > disponivel) {
-          const prodNome = produtos.find(p => String(p.id) === String(item.produtoId))?.nome || "Produto";
-          setErrosValidacao([`Quantidade indisponível para ${prodNome}. Estoque atual: ${disponivel} pç(s)`]);
-          return;
-        }
+      const disponivel = obterEstoqueDisponivel(item.produtoId, item.corEscolhida, item.tamanhoEscolhido);
+      
+      if (Number(item.quantidade) > disponivel) {
+        const prodNome = produtos.find(p => String(p.id) === String(item.produtoId))?.nome || "Produto";
+        setErrosValidacao([`Quantidade indisponível para ${prodNome}. Estoque atual: ${disponivel} pç(s)`]);
+        return;
       }
     }
 
-    try {
+    // Envio dos dados para a API do Spring Boot
+   try {
       if (editandoId) {
         await api.put(`/condicionais/${editandoId}`, formCondicional);
         setMensagemSucesso("Sacola condicional editada e salva com sucesso!");
@@ -188,7 +210,8 @@ const TelaCondicionais = () => {
         setMensagemSucesso("Nova sacola registrada com sucesso no sistema!");
       }
       setModalFormAberto(false);
-      carregarDadosDoSistema();
+      carregarDadosDoSistema(); // Mantém apenas esse recarregamento normal
+
       setTimeout(() => setMensagemSucesso(''), 3000);
     } catch (err) {
       const msgErro = err.response?.data?.message || "Erro ao comunicar com a API do Spring Boot.";
@@ -196,29 +219,37 @@ const TelaCondicionais = () => {
     }
   };
 
-  const deletarCondicional = async () => {
-    await api.delete(`/condicionais/${modalExcluir.id}`);
-    setModalExcluir({ aberto: false, id: null });
-    setMensagemSucesso("Condicional cancelado e removido.");
-    carregarDadosDoSistema();
+  // Deletar condicional
+ const deletarCondicional = async () => {
+    try {
+      await api.delete(`/condicionais/${modalExcluir.id}`);
+      setMensagemSucesso('Condicional removido com sucesso!');
+      setModalExcluir({ aberto: false, id: null });
+      
+      // Carrega todo o ecossistema atualizado (incluindo a lixeira)
+      await carregarDadosDoSistema(); 
+
+      setTimeout(() => setMensagemSucesso(''), 4000);
+    } catch (erro) {
+      setErrosValidacao(['Não foi possível excluir o registro.']);
+    }
   };
 
   // DISPARA A ATUALIZAÇÃO REAL PARA O BACKEND ENVIANDO A SACOLA PARA O HISTÓRICO
   const finalizarBaixaItemPorItem = async () => {
     try {
-      // Monta o payload exatamente na estrutura que o seu endpoint Java espera receber para atualizar a sacola e os itens
       const dadosParaAtualizar = {
         clienteId: sacolaParaBaixa.cliente?.id,
         dataSaida: sacolaParaBaixa.dataSaida,
         dataRetorno: sacolaParaBaixa.dataRetorno,
-        status: 'FINALIZADA', // Altera o status do condicional para ir para o Histórico
+        status: 'FINALIZADA', 
         itens: itensBaixa.map(it => ({
           id: it.id, 
           produtoId: it.produtoId,
           quantidade: it.quantidade,
           corEscolhida: it.corEscolhida,
           tamanhoEscolhido: it.tamanhoEscolhido,
-          statusItem: it.statusItem // 'DEVOLVIDA' ou 'VENDIDO'
+          statusItem: it.statusItem 
         }))
       };
 
@@ -235,6 +266,7 @@ const TelaCondicionais = () => {
     }
   };
 
+  // Se a aba ativa for 'excluidas', ela retorna os dados da lixeira. Caso contrário, filtra a lista normal
   const listaFiltrada = listaCondicionais.filter(c => {
     if (abaAtiva === 'ativas') return c.status === 'ABERTA';
     return c.status === 'FINALIZADA' || c.status === 'DEVOLVIDA';
@@ -271,7 +303,7 @@ const TelaCondicionais = () => {
           className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${abaAtiva === 'finalizadas' ? 'border-b-2 border-[#4a5d33] text-black font-extrabold bg-white/40' : 'text-gray-500 hover:text-black'}`}
         >
           ✅ Histórico de Finalizados ({listaCondicionais.filter(c => c.status !== 'ABERTA').length})
-        </button>
+        </button> 
       </div>
 
       {/* TABELA DE REGISTROS */}

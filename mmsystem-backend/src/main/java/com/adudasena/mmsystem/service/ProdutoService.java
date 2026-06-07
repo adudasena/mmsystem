@@ -1,6 +1,7 @@
 package com.adudasena.mmsystem.service;
 
 import com.adudasena.mmsystem.dto.ProdutoDTO;
+import com.adudasena.mmsystem.model.Condicional;
 import com.adudasena.mmsystem.model.Produto;
 import com.adudasena.mmsystem.repository.CondicionalRepository;
 import com.adudasena.mmsystem.repository.ProdutoRepository;
@@ -43,16 +44,38 @@ public class ProdutoService {
     }
 
     public void excluir(Long id) {
+        // Busca as condicionais do sistema que não sofreram soft delete
+        List<Condicional> condicionaisAtivas = condicionalRepository.findByDeletedAtIsNull();
+
+        // Varre os itens guardados na memória para ver se o ID do produto está lá
+        boolean emUso = condicionaisAtivas.stream()
+                .filter(c -> "ABERTA".equals(c.getStatus())) // Filtra só as sacolas abertas
+                .filter(c -> c.getItens() != null)           // Evita NullPointerException se a lista de itens for nula
+                .flatMap(c -> c.getItens().stream())         // Entra na lista de itens
+                .filter(item -> item.getProduto() != null)   // Evita NullPointerException se o produto dentro do item estiver nulo
+                .anyMatch(item -> id.equals(item.getProduto().getId())); // Acessa o ID do produto pelo objeto
+
+        // Se o produto estiver em alguma sacola aberta, impede a exclusão
+        if (emUso) {
+            throw new RuntimeException("Não é possível excluir este produto pois ele está vinculado a uma sacola condicional ativa em andamento.");
+        }
+
+        // Se estiver tudo limpo, aplica o Soft Delete normalmente
         Produto produto = buscarPorId(id);
-        produto.setDeletedAt(LocalDateTime.now()); // Soft Delete aplicado
+        produto.setDeletedAt(LocalDateTime.now());
         repository.save(produto);
+    }
+
+    // Listar apenas o que está na lixeira
+    public List<Produto> listarExcluidos() {
+        return repository.findByDeletedAtIsNotNull();
     }
 
     private Produto salvar(Produto produto, ProdutoDTO dto) throws JsonProcessingException {
         produto.setNome(dto.getNome());
         produto.setDescricao(dto.getDescricao());
         produto.setPreco(dto.getPreco());
-        produto.setCategoria(dto.getCategoria()); // ← essa linha precisa estar aqui
+        produto.setCategoria(dto.getCategoria()); // essa linha precisa estar aqui
         produto.setStatus(dto.getStatus() != null ? dto.getStatus().toUpperCase() : "DISPONIVEL");
         produto.setCoresText(objectMapper.writeValueAsString(dto.getCoresSelecionadas()));
         produto.setTamanhosText(objectMapper.writeValueAsString(dto.getTamanhosSelecionados()));
