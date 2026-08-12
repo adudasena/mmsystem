@@ -29,17 +29,26 @@ const TelaCondicionais = () => {
     itens: [{ produtoId: '', quantidade: 1, corEscolhida: '', tamanhoEscolhido: '', statusItem: 'EM_CONDICIONAL' }]
   });
 
-  const carregarDadosDoSistema = async () => {
+const carregarDadosDoSistema = async () => {
     try {
-      const [resCond, resCli, resProd] = await Promise.all([
+      // Trocado '/clientes' por '/usuarios' e isolado cada requisição
+      const [resCond, resCli, resProd] = await Promise.allSettled([
         api.get('/condicionais'),
-        api.get('/clientes'),
+        api.get('/usuarios'),
         api.get('/produtos')
       ]);
       
-      if (resCond.data) setListaCondicionais(resCond.data);
-      if (resCli.data) setClientes(resCli.data);
-      if (resProd.data) setProdutos(resProd.data);
+      if (resCond.status === 'fulfilled' && resCond.value.data) {
+        setListaCondicionais(resCond.value.data);
+      }
+
+      if (resCli.status === 'fulfilled' && resCli.value.data) {
+        setClientes(resCli.value.data);
+      }
+
+      if (resProd.status === 'fulfilled' && resProd.value.data) {
+        setProdutos(resProd.value.data);
+      }
     } catch (err) {
       console.error("Erro ao sincronizar ecossistema de dados:", err);
     }
@@ -62,24 +71,24 @@ const TelaCondicionais = () => {
     setModalFormAberto(true);
   };
 
-  const prepararEdicaoLocal = (cond) => {
-    setEditandoId(cond.id);
-    setErrosValidacao([]);
-    setFormCondicional({
-      clienteId: cond.cliente?.id || '',
-      dataSaida: cond.dataSaida || '',
-      dataRetorno: cond.dataRetorno || '',
-      status: cond.status || 'ABERTA',
-      itens: cond.itens.map(it => ({
-        produtoId: it.produto?.id || '',
-        quantidade: it.quantidade || 1,
-        corEscolhida: it.corEscolhida || '',
-        tamanhoEscolhido: it.tamanhoEscolhido || '',
-        statusItem: it.statusItem || 'EM_CONDICIONAL'
-      }))
-    });
-    setModalFormAberto(true);
-  };
+ const prepararEdicaoLocal = (cond) => {
+  setEditandoId(cond.id);
+  setErrosValidacao([]);
+  setFormCondicional({
+    clienteId: cond.usuario?.id || cond.cliente?.id || '', // Suporta ambas as chaves
+    dataSaida: cond.dataSaida || '',
+    dataRetorno: cond.dataRetorno || '',
+    status: cond.status || 'ABERTA',
+    itens: cond.itens.map(it => ({
+      produtoId: it.produto?.id || '',
+      quantidade: it.quantidade || 1,
+      corEscolhida: it.corEscolhida || '',
+      tamanhoEscolhido: it.tamanhoEscolhido || '',
+      statusItem: it.statusItem || 'EM_CONDICIONAL'
+    }))
+  });
+  setModalFormAberto(true);
+};
 
   // Abre a triagem individual de baixa e define o padrão inicial como DEVOLVIDO
   const prepararBaixaIndividual = (sacola) => {
@@ -236,25 +245,24 @@ const TelaCondicionais = () => {
   };
 
   // DISPARA A ATUALIZAÇÃO REAL PARA O BACKEND ENVIANDO A SACOLA PARA O HISTÓRICO
-  const finalizarBaixaItemPorItem = async () => {
-    try {
-      const dadosParaAtualizar = {
-        clienteId: sacolaParaBaixa.cliente?.id,
-        dataSaida: sacolaParaBaixa.dataSaida,
-        dataRetorno: sacolaParaBaixa.dataRetorno,
-        status: 'FINALIZADA', 
-        itens: itensBaixa.map(it => ({
-          id: it.id, 
-          produtoId: it.produtoId,
-          quantidade: it.quantidade,
-          corEscolhida: it.corEscolhida,
-          tamanhoEscolhido: it.tamanhoEscolhido,
-          statusItem: it.statusItem 
-        }))
-      };
+ const finalizarBaixaItemPorItem = async () => {
+  try {
+    const dadosParaAtualizar = {
+      clienteId: sacolaParaBaixa.usuario?.id || sacolaParaBaixa.cliente?.id, // Ajustado!
+      dataSaida: sacolaParaBaixa.dataSaida,
+      dataRetorno: sacolaParaBaixa.dataRetorno,
+      status: 'FINALIZADA', 
+      itens: itensBaixa.map(it => ({
+        id: it.id, 
+        produtoId: it.produtoId,
+        quantidade: it.quantidade,
+        corEscolhida: it.corEscolhida,
+        tamanhoEscolhido: it.tamanhoEscolhido,
+        statusItem: it.statusItem 
+      }))
+    };
+await api.put(`/condicionais/${sacolaParaBaixa.id}`, dadosParaAtualizar);   
 
-      await api.put(`/condicionais/${sacolaParaBaixa.id}`, dadosParaAtualizar);
-      
       setModalBaixaAberto(false);
       setSacolaParaBaixa(null);
       setMensagemSucesso("Baixa processada e armazenada no histórico de finalizados!");
@@ -331,8 +339,7 @@ const TelaCondicionais = () => {
                 listaFiltrada.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50/80 bg-white">
                     <td className="p-3 border-r border-gray-200 font-bold text-gray-700">{String(c.id).padStart(3, '0')}</td>
-                    <td className="p-3 border-r border-gray-200 font-semibold">{c.cliente?.nome}</td>
-                    <td className="p-3 border-r border-gray-200 font-bold text-gray-900">R$ {Number(c.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    <td className="p-3 border-r border-gray-200 font-semibold">{c.usuario?.nome || c.cliente?.nome || '—'}</td>                    <td className="p-3 border-r border-gray-200 font-bold text-gray-900">R$ {Number(c.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                     <td className="p-3 border-r border-gray-200 text-gray-500">{c.dataSaida}</td>
                     <td className="p-3 border-r border-gray-200 text-red-700 font-bold">{c.dataRetorno}</td>
                     <td className="p-3 border-r border-gray-200 uppercase font-mono text-[10px]">

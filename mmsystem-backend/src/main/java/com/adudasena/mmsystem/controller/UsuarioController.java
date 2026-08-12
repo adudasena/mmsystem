@@ -1,38 +1,38 @@
 package com.adudasena.mmsystem.controller;
 
-import com.adudasena.mmsystem.dto.ClienteDTO;
-import com.adudasena.mmsystem.model.Cliente;
-import com.adudasena.mmsystem.service.ClienteService;
+import com.adudasena.mmsystem.dto.UsuarioDTO;
+import com.adudasena.mmsystem.model.Usuario;
+import com.adudasena.mmsystem.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/clientes")
+@RequestMapping("/usuarios")
 @CrossOrigin("*")
-public class ClienteController {
+public class UsuarioController {
 
     @Autowired
-    private ClienteService service;
+    private UsuarioService service;
 
     @GetMapping
-    public List<Cliente> listar() {
+    public List<Usuario> listar() {
         return service.listarTodos();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Cliente> buscarPorId(@PathVariable Long id) {
+    public ResponseEntity<Usuario> buscarPorId(@PathVariable Long id) {
         return ResponseEntity.ok(service.buscarPorId(id));
     }
 
     @PostMapping
-    public ResponseEntity<Cliente> salvar(@RequestBody ClienteDTO dto) {
+    public ResponseEntity<Usuario> salvar(@RequestBody UsuarioDTO dto) {
         return ResponseEntity.status(201).body(service.salvar(dto));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Cliente> atualizar(@PathVariable Long id, @RequestBody ClienteDTO dto) {
+    public ResponseEntity<Usuario> atualizar(@PathVariable Long id, @RequestBody UsuarioDTO dto) {
         return ResponseEntity.ok(service.atualizar(id, dto));
     }
 

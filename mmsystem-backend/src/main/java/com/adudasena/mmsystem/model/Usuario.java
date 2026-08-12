@@ -2,11 +2,12 @@ package com.adudasena.mmsystem.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "clientes")
+@Table(name = "usuarios")
 @Data
-public class Cliente {
+public class Usuario {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -18,7 +19,15 @@ public class Cliente {
     @Column(nullable = false, unique = true)
     private String telefone;
 
-    //Soft delete
+    @Column(unique = true)
+    private String email;
+
+    private String senha;
+
+    @Column(nullable = false)
+    private String perfil; // "CLIENTE", "PROPRIETARIA", "FUNCIONARIO"
+
+    // Soft delete
     @Column(name = "deleted_at")
-    private java.time.LocalDateTime deletedAt;
+    private LocalDateTime deletedAt;
 }

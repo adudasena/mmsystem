@@ -22,7 +22,7 @@ public class CondicionalService {
     private CondicionalRepository repository;
 
     @Autowired
-    private ClienteRepository clienteRepository;
+    private UsuarioRepository usuarioRepository;
 
     @Autowired
     private ProdutoRepository produtoRepository;
@@ -45,11 +45,11 @@ public class CondicionalService {
         // Validação de Limite de Data (Máximo 30 dias)
         validarPrazoMaximo(dto.getDataSaida(), dto.getDataRetorno());
 
-        Cliente cliente = clienteRepository.findById(dto.getClienteId())
+        Usuario usuario = usuarioRepository.findById(dto.getClienteId())
                 .orElseThrow(() -> new RuntimeException("Cliente não encontrado: " + dto.getClienteId()));
 
         Condicional condicional = new Condicional();
-        condicional.setCliente(cliente);
+        condicional.setUsuario(usuario);
         condicional.setDataSaida(dto.getDataSaida());
         condicional.setDataRetorno(dto.getDataRetorno());
         condicional.setStatus(dto.getStatus() != null ? dto.getStatus().toUpperCase() : "ABERTA");
@@ -66,10 +66,10 @@ public class CondicionalService {
 
         Condicional condicional = buscarPorId(id);
 
-        Cliente cliente = clienteRepository.findById(dto.getClienteId())
+        Usuario usuario = usuarioRepository.findById(dto.getClienteId())
                 .orElseThrow(() -> new RuntimeException("Cliente não encontrado: " + dto.getClienteId()));
 
-        condicional.setCliente(cliente);
+        condicional.setUsuario(usuario);
         condicional.setDataSaida(dto.getDataSaida());
         condicional.setDataRetorno(dto.getDataRetorno());
         if (dto.getStatus() != null) {
@@ -101,7 +101,7 @@ public class CondicionalService {
         boolean possuiDevolucao = false;
 
         // Fluxo original de iteração de baixa e comparação
-        for (Condicional.ItemItem itemBanco : condicional.getItens()) {
+        for (Condicional.ItemCondicional itemBanco : condicional.getItens()) {
             CondicionalDTO.ItemSacolaDTO itemDto = itensEnviadosPeloFront.stream()
                     .filter(i -> i.getProdutoId().equals(itemBanco.getProduto().getId())
                             && i.getCorEscolhida().equals(itemBanco.getCorEscolhida())
@@ -148,7 +148,7 @@ public class CondicionalService {
             Produto produto = produtoRepository.findById(itemDTO.getProdutoId())
                     .orElseThrow(() -> new RuntimeException("Produto não encontrado: " + itemDTO.getProdutoId()));
 
-            Condicional.ItemItem item = new Condicional.ItemItem();
+            Condicional.ItemCondicional item = new Condicional.ItemCondicional();
             item.setProduto(produto);
             item.setQuantidade(itemDTO.getQuantidade() != null ? itemDTO.getQuantidade() : 1);
             item.setCorEscolhida(itemDTO.getCorEscolhida());
@@ -177,26 +177,42 @@ public class CondicionalService {
     }
 
     //  ESTOQUE COM MAP DUPLO E VALIDAÇÃO CONTRA NEGATIVOS
-    private void atualizarEstoqueProduto(Produto produto, String cor, String tamanho, int qtdVendida) {
+    private void atualizarEstoqueProduto(Produto produtoOriginal, String cor, String tamanho, int qtdVendida) {
         try {
+            // 1. Busca instância gerenciada e fresca do banco de dados
+            Produto produto = produtoRepository.findById(produtoOriginal.getId())
+                    .orElseThrow(() -> new RuntimeException("Produto não localizado para atualização de estoque."));
+
             String jsonEstoque = produto.getEstoqueDetalhado();
             if (jsonEstoque == null || jsonEstoque.isEmpty()) return;
 
-            Map<String, Map<String, Integer>> estoque = objectMapper.readValue(
-                    jsonEstoque, new TypeReference<Map<String, Map<String, Integer>>>() {}
+            // Transforma o JSON em um mapa simples Map<String, Integer> para bater com o front-end
+            Map<String, Integer> estoque = objectMapper.readValue(
+                    jsonEstoque, new TypeReference<Map<String, Integer>>() {
+                    }
             );
 
-            if (estoque.containsKey(cor) && estoque.get(cor).containsKey(tamanho)) {
-                int qtdAtual = estoque.get(cor).get(tamanho);
-                int novaQtd = Math.max(0, qtdAtual - qtdVendida); // Evita estoque negativo
+            // Monta a chave exatamente como o front-end gera: "Cor-Tamanho" (Ex: "Roxo-P")
+            String chaveComposta = cor + "-" + tamanho;
 
-                estoque.get(cor).put(tamanho, novaQtd);
+            if (estoque.containsKey(chaveComposta)) {
+                int qtdAtual = estoque.get(chaveComposta);
+                int novaQtd = Math.max(0, qtdAtual - qtdVendida); // Evita valores negativos
 
+                // Altera o saldo da variação
+                estoque.put(chaveComposta, novaQtd);
+
+                // Serializa de volta para String e força a gravação imediata no banco de dados
                 produto.setEstoqueDetalhado(objectMapper.writeValueAsString(estoque));
-                produtoRepository.save(produto);
+                produtoRepository.saveAndFlush(produto);
+
+                System.out.println("Sincronização realizada! Chave: " + chaveComposta + " alterada para " + novaQtd);
+            } else {
+                System.out.println("Aviso: Chave " + chaveComposta + " não encontrada no estoque do produto.");
             }
         } catch (Exception e) {
-            System.err.println("Falha ao atualizar estoque do produto: " + e.getMessage());
+            System.err.println("Falha crítica ao desserializar e atualizar estoque do produto: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

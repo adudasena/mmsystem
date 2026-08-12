@@ -23,7 +23,7 @@ public class Condicional {
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "fk_cliente_id", nullable = false)
-    private Cliente cliente;
+    private Usuario usuario;
 
     @Column(name = "data_saida", nullable = false)
     private LocalDate dataSaida;
@@ -43,11 +43,11 @@ public class Condicional {
     // Mapeia a tabela auxiliar itens_condicional sem precisar de uma classe Entidade Java separada
     @ElementCollection
     @CollectionTable(name = "itens_condicional", joinColumns = @JoinColumn(name = "fk_condicional_id"))
-    private List<ItemItem> itens = new ArrayList<>();
+    private List<ItemCondicional> itens = new ArrayList<>();
 
     @Data
     @Embeddable
-    public static class ItemItem {
+    public static class ItemCondicional {
         @ManyToOne(optional = false)
         @JoinColumn(name = "fk_produto_id", nullable = false)
         private Produto produto;
