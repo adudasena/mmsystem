@@ -6,6 +6,7 @@ import TelaCondicionais from './pages/TelaCondicionais';
 import TelaUsuarios from './pages/TelaUsuarios';
 import TelaPedidos from './pages/TelaPedidos';
 import TelaPagamentos from './pages/TelaPagamentos';
+import TelaVitrine from './pages/VitrineProdutos'; // Tela pública do catálogo
 
 const PainelGeral = () => (
   <h2 className="text-2xl font-bold text-gray-800">Bem-vinda, Proprietária! 👋</h2>
@@ -14,21 +15,30 @@ const PainelGeral = () => (
 function App() {
   return (
     <Router>
-      <div className="flex min-h-screen bg-[#dcded0]">
-        <MenuLateral />
-        
-        <main className="flex-1 ml-72 p-10">
-          <Routes>
-            <Route path="/" element={<PainelGeral />} />
-            <Route path="/produtos" element={<TelaProdutos />} />
-            <Route path="/condicionais" element={<TelaCondicionais />} />
-            <Route path="/usuarios" element={<TelaUsuarios />} />      
-            <Route path="/pedidos" element={<TelaPedidos />} />   
-          <Route path="/pagamentos" element={<TelaPagamentos />} />     
+      <Routes>
+        {/* ROTA PÚBLICA (Vitrine das clientes - sem o MenuLateral do admin) */}
+        <Route path="/vitrine" element={<TelaVitrine />} />
 
-          </Routes>
-        </main>
-      </div>
+        {/* ROTAS DO PAINEL ADMINISTRATIVO (Com MenuLateral) */}
+        <Route
+          path="/*"
+          element={
+            <div className="flex min-h-screen bg-[#dcded0]">
+              <MenuLateral />
+              <main className="flex-1 ml-72 p-10">
+                <Routes>
+                  <Route path="/" element={<PainelGeral />} />
+                  <Route path="/produtos" element={<TelaProdutos />} />
+                  <Route path="/condicionais" element={<TelaCondicionais />} />
+                  <Route path="/usuarios" element={<TelaUsuarios />} />      
+                  <Route path="/pedidos" element={<TelaPedidos />} />   
+                  <Route path="/pagamentos" element={<TelaPagamentos />} />     
+                </Routes>
+              </main>
+            </div>
+          }
+        />
+      </Routes>
     </Router>
   );
 }

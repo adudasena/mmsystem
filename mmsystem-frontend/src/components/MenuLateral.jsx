@@ -12,6 +12,8 @@ const MenuLateral = () => {
     { nome: 'Pagamentos Futuros', rota: '/pagamentos', icone: '💰' },
     { nome: 'Pedidos', rota: '/pedidos', icone: '🛒' },
     { nome: 'Clientes', rota: '/usuarios', icone: '👤' },
+    { nome: 'Vitrine', rota: '/vitrine', icone: '🛍️' },
+    
   ];
 
   return (
