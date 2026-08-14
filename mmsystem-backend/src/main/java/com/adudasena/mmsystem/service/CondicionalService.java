@@ -1,6 +1,7 @@
 package com.adudasena.mmsystem.service;
 
 import com.adudasena.mmsystem.dto.CondicionalDTO;
+import com.adudasena.mmsystem.dto.VitrinePedidoDTO;
 import com.adudasena.mmsystem.model.*;
 import com.adudasena.mmsystem.repository.*;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -10,10 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class CondicionalService {
@@ -31,7 +34,6 @@ public class CondicionalService {
     private ObjectMapper objectMapper;
 
     public List<Condicional> listarTodos() {
-        // O @Where(clause = "deleted_at IS NULL") na model garante o filtro automático aqui
         return repository.findAll();
     }
 
@@ -42,7 +44,6 @@ public class CondicionalService {
 
     @Transactional
     public Condicional criar(CondicionalDTO dto) {
-        // Validação de Limite de Data (Máximo 30 dias)
         validarPrazoMaximo(dto.getDataSaida(), dto.getDataRetorno());
 
         Usuario usuario = usuarioRepository.findById(dto.getClienteId())
@@ -77,7 +78,6 @@ public class CondicionalService {
         }
 
         if (dto.getItens() != null) {
-            // Maneira correta para o Hibernate não perder a referência do Cascade - INTACTA
             condicional.getItens().clear();
             repository.saveAndFlush(condicional);
 
@@ -100,7 +100,6 @@ public class CondicionalService {
         boolean possuiVenda = false;
         boolean possuiDevolucao = false;
 
-        // Fluxo original de iteração de baixa e comparação
         for (Condicional.ItemCondicional itemBanco : condicional.getItens()) {
             CondicionalDTO.ItemSacolaDTO itemDto = itensEnviadosPeloFront.stream()
                     .filter(i -> i.getProdutoId().equals(itemBanco.getProduto().getId())
@@ -116,7 +115,6 @@ public class CondicionalService {
                     itemBanco.setStatusItem("VENDIDO");
                     possuiVenda = true;
 
-                    // Chama seu método original de estoque com tratamento de Map duplo do JSON
                     atualizarEstoqueProduto(itemBanco.getProduto(), itemBanco.getCorEscolhida(), itemBanco.getTamanhoEscolhido(), itemBanco.getQuantidade());
                 } else if (acaoVendedora.equals("DISPONIVEL") || acaoVendedora.equals("DEVOLVIDO")) {
                     itemBanco.setStatusItem("DISPONIVEL");
@@ -136,10 +134,40 @@ public class CondicionalService {
 
     @Transactional
     public void excluir(Long id) {
-        // Ajustado para aplicar o Soft Delete usando LocalDateTime conforme exigido
         Condicional condicional = buscarPorId(id);
         condicional.setDeletedAt(LocalDateTime.now());
         repository.save(condicional);
+    }
+
+    @Transactional
+    public Condicional processarPedidoVitrine(VitrinePedidoDTO dto) {
+        Usuario usuario = usuarioRepository.findById(dto.getUsuarioId())
+                .orElseThrow(() -> new RuntimeException("Cliente/Usuário não encontrado: " + dto.getUsuarioId()));
+
+        Condicional condicional = new Condicional();
+        condicional.setUsuario(usuario);
+        condicional.setDataSaida(LocalDate.now());
+        condicional.setDataRetorno(LocalDate.now().plusDays(3));
+        condicional.setStatus("ABERTA");
+
+        List<Condicional.ItemCondicional> itens = dto.getItens().stream().map(itemDto -> {
+            Produto produto = produtoRepository.findById(itemDto.getProdutoId())
+                    .orElseThrow(() -> new RuntimeException("Produto não encontrado ID: " + itemDto.getProdutoId()));
+
+            Condicional.ItemCondicional item = new Condicional.ItemCondicional();
+            item.setProduto(produto);
+            item.setQuantidade(itemDto.getQuantidade() != null ? itemDto.getQuantidade() : 1);
+            item.setCorEscolhida(itemDto.getCorEscolhida());
+            item.setTamanhoEscolhido(itemDto.getTamanhoEscolhido());
+            item.setStatusItem("EM_CONDICIONAL");
+
+            return item;
+        }).collect(Collectors.toList());
+
+        condicional.setItens(itens);
+        calcularTotal(condicional);
+
+        return repository.save(condicional);
     }
 
     private void preencherItens(Condicional condicional, List<CondicionalDTO.ItemSacolaDTO> itensDTO) {
@@ -167,7 +195,7 @@ public class CondicionalService {
         condicional.setValorTotal(total);
     }
 
-    private void validarPrazoMaximo(java.time.LocalDate inicio, java.time.LocalDate fim) {
+    private void validarPrazoMaximo(LocalDate inicio, LocalDate fim) {
         if (inicio != null && fim != null) {
             long dias = ChronoUnit.DAYS.between(inicio, fim);
             if (dias > 30) {
@@ -176,43 +204,31 @@ public class CondicionalService {
         }
     }
 
-    //  ESTOQUE COM MAP DUPLO E VALIDAÇÃO CONTRA NEGATIVOS
     private void atualizarEstoqueProduto(Produto produtoOriginal, String cor, String tamanho, int qtdVendida) {
         try {
-            // 1. Busca instância gerenciada e fresca do banco de dados
             Produto produto = produtoRepository.findById(produtoOriginal.getId())
                     .orElseThrow(() -> new RuntimeException("Produto não localizado para atualização de estoque."));
 
             String jsonEstoque = produto.getEstoqueDetalhado();
             if (jsonEstoque == null || jsonEstoque.isEmpty()) return;
 
-            // Transforma o JSON em um mapa simples Map<String, Integer> para bater com o front-end
             Map<String, Integer> estoque = objectMapper.readValue(
-                    jsonEstoque, new TypeReference<Map<String, Integer>>() {
-                    }
+                    jsonEstoque, new TypeReference<Map<String, Integer>>() {}
             );
 
-            // Monta a chave exatamente como o front-end gera: "Cor-Tamanho" (Ex: "Roxo-P")
             String chaveComposta = cor + "-" + tamanho;
 
             if (estoque.containsKey(chaveComposta)) {
                 int qtdAtual = estoque.get(chaveComposta);
-                int novaQtd = Math.max(0, qtdAtual - qtdVendida); // Evita valores negativos
+                int novaQtd = Math.max(0, qtdAtual - qtdVendida);
 
-                // Altera o saldo da variação
                 estoque.put(chaveComposta, novaQtd);
 
-                // Serializa de volta para String e força a gravação imediata no banco de dados
                 produto.setEstoqueDetalhado(objectMapper.writeValueAsString(estoque));
                 produtoRepository.saveAndFlush(produto);
-
-                System.out.println("Sincronização realizada! Chave: " + chaveComposta + " alterada para " + novaQtd);
-            } else {
-                System.out.println("Aviso: Chave " + chaveComposta + " não encontrada no estoque do produto.");
             }
         } catch (Exception e) {
-            System.err.println("Falha crítica ao desserializar e atualizar estoque do produto: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("Falha ao atualizar estoque: " + e.getMessage());
         }
     }
 }

@@ -16,31 +16,47 @@ public class UsuarioService {
     private UsuarioRepository repository;
 
     public List<Usuario> listarTodos() {
-        return repository.findAll();
+        // Usa o método de Soft Delete do seu Repository
+        return repository.findByDeletedAtIsNull();
     }
 
     public Usuario buscarPorId(Long id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Cliente não encontrado: " + id));
+        return repository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new RuntimeException("Cliente/Usuário não encontrado com o ID: " + id));
     }
 
     public Usuario salvar(UsuarioDTO dto) {
         Usuario usuario = new Usuario();
-        usuario.setNome(dto.getNome());
-        usuario.setTelefone(dto.getTelefone());
+        copiarDtoParaEntidade(dto, usuario);
         return repository.save(usuario);
     }
 
     public Usuario atualizar(Long id, UsuarioDTO dto) {
         Usuario usuario = buscarPorId(id);
-        usuario.setNome(dto.getNome());
-        usuario.setTelefone(dto.getTelefone());
+        copiarDtoParaEntidade(dto, usuario);
         return repository.save(usuario);
     }
 
     public void excluir(Long id) {
         Usuario usuario = buscarPorId(id);
-        usuario.setDeletedAt(LocalDateTime.now()); // Soft Delete aplicado
+        usuario.setDeletedAt(LocalDateTime.now()); // Soft Delete
         repository.save(usuario);
+    }
+
+    private void copiarDtoParaEntidade(UsuarioDTO dto, Usuario usuario) {
+        usuario.setNome(dto.getNome());
+        usuario.setTelefone(dto.getTelefone());
+        usuario.setEmail(dto.getEmail());
+
+        // Define o perfil padrão como CLIENTE caso não venha informado
+        if (dto.getPerfil() != null && !dto.getPerfil().isBlank()) {
+            usuario.setPerfil(dto.getPerfil());
+        } else {
+            usuario.setPerfil("CLIENTE");
+        }
+
+        if (dto.getSenha() != null && !dto.getSenha().isBlank()) {
+            usuario.setSenha(dto.getSenha());
+        }
     }
 }

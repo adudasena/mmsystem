@@ -9,9 +9,9 @@ const MenuLateral = () => {
     { nome: 'Painel', rota: '/', icone: '📊' },
     { nome: 'Produtos', rota: '/produtos', icone: '👗' }, 
     { nome: 'Condicionais', rota: '/condicionais', icone: '📦' },
-    { nome: 'Pagamentos Futuros', rota: '/pagamentos-futuros', icone: '💰' },
-    { nome: 'Vendas', rota: '/vendas', icone: '🛒' },
-    { nome: 'Clientes', rota: '/clientes', icone: '👤' },
+    { nome: 'Pagamentos Futuros', rota: '/pagamentos', icone: '💰' },
+    { nome: 'Pedidos', rota: '/pedidos', icone: '🛒' },
+    { nome: 'Clientes', rota: '/usuarios', icone: '👤' },
   ];
 
   return (
