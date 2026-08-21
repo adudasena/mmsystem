@@ -35,7 +35,9 @@ public class ProdutoService {
     }
 
     public Produto salvar(ProdutoDTO dto) throws JsonProcessingException {
-        return salvar(new Produto(), dto);
+
+      Produto teste = salvar(new Produto(), dto);
+        return teste;
     }
 
     public Produto atualizar(Long id, ProdutoDTO dto) throws JsonProcessingException {

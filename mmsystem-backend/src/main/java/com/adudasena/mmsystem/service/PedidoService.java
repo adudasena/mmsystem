@@ -40,7 +40,6 @@ public class PedidoService {
         Pedido pedido = new Pedido();
         pedido.setDataPedido(dto.getDataPedido());
 
-        // Conversão de String para Enum StatusPedido
         if (dto.getStatus() != null) {
             pedido.setStatus(StatusPedido.valueOf(dto.getStatus()));
         }

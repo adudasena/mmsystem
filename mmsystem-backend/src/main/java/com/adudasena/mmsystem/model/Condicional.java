@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.Where;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,27 +41,13 @@ public class Condicional {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt; // Campo para Soft Delete
 
-    // Mapeia a tabela auxiliar itens_condicional sem precisar de uma classe Entidade Java separada
-    @ElementCollection
-    @CollectionTable(name = "itens_condicional", joinColumns = @JoinColumn(name = "fk_condicional_id"))
+    // Relacionamento 1 para N com a entidade ItemCondicional separada
+    @OneToMany(mappedBy = "condicional", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ItemCondicional> itens = new ArrayList<>();
 
-    @Data
-    @Embeddable
-    public static class ItemCondicional {
-        @ManyToOne(optional = false)
-        @JoinColumn(name = "fk_produto_id", nullable = false)
-        private Produto produto;
-
-        private Integer quantidade;
-
-        @Column(name = "cor_escolhida")
-        private String corEscolhida;
-
-        @Column(name = "tamanho_escolhido")
-        private String tamanhoEscolhido;
-
-        @Column(name = "status_item")
-        private String statusItem;
+    // Método utilitário para associar os itens e manter a consistência bidirecional
+    public void adicionarItem(ItemCondicional item) {
+        itens.add(item);
+        item.setCondicional(this);
     }
 }

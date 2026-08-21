@@ -32,7 +32,6 @@ public class PagamentoController {
         Pagamento pagamento = new Pagamento();
         pagamento.setValor(dto.getValor());
 
-        // CORREÇÃO 1: Converte a String do DTO para a Enum MetodoPagamento
         if (dto.getMetodoPagamento() != null) {
             pagamento.setMetodoPagamento(MetodoPagamento.valueOf(dto.getMetodoPagamento()));
         }

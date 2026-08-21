@@ -28,7 +28,6 @@ public class PagamentoService {
         Pagamento pagamento = new Pagamento();
         pagamento.setValor(dto.getValor());
 
-        // Conversão de String para Enum MetodoPagamento
         if (dto.getMetodoPagamento() != null) {
             pagamento.setMetodoPagamento(MetodoPagamento.valueOf(dto.getMetodoPagamento()));
         }

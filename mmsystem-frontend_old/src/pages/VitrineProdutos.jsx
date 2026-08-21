@@ -6,6 +6,7 @@ const VitrineProdutos = () => {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
 
+
   // Filtros conforme o protótipo
   const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [tamanhoFiltro, setTamanhoFiltro] = useState('');
@@ -68,7 +69,8 @@ const VitrineProdutos = () => {
       })),
     };
 
-    fetch('http://localhost:8080/pedidos/vitrine', {
+
+    fetch(`${apiUrl}pedidos/vitrine`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -131,11 +133,11 @@ const VitrineProdutos = () => {
             onChange={(e) => setCategoriaFiltro(e.target.value)}
             className="bg-white border border-gray-300 rounded-xl px-4 py-2 text-sm font-medium text-gray-700 shadow-sm focus:outline-none"
           >
-            <option value="">Todas as Categoria ▼</option>
+            <option value="">Todas as Categorias ▼</option>
             <option value="Vestidos">Vestidos</option>
             <option value="Blusas">Blusas</option>
             <option value="Calças">Calças</option>
-            <option value="Saia">Saias</option>
+            <option value="Saias">Saias</option>
           </select>
 
           <select

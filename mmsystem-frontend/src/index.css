@@ -1,1 +1,22 @@
 @import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #dcded0;
+    color: #2c3e1c;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+}
+
+/* Ajuste fino dos cards e fundos para bater com as fotos do protótipo */
+.bg-card-proto {
+  background-color: #f2f3eb;
+}
+
+.bg-table-header {
+  background-color: #cdd5bd;
+}

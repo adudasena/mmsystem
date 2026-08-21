@@ -100,7 +100,7 @@ public class CondicionalService {
         boolean possuiVenda = false;
         boolean possuiDevolucao = false;
 
-        for (Condicional.ItemCondicional itemBanco : condicional.getItens()) {
+        for (ItemCondicional itemBanco : condicional.getItens()) {
             CondicionalDTO.ItemSacolaDTO itemDto = itensEnviadosPeloFront.stream()
                     .filter(i -> i.getProdutoId().equals(itemBanco.getProduto().getId())
                             && i.getCorEscolhida().equals(itemBanco.getCorEscolhida())
@@ -150,11 +150,12 @@ public class CondicionalService {
         condicional.setDataRetorno(LocalDate.now().plusDays(3));
         condicional.setStatus("ABERTA");
 
-        List<Condicional.ItemCondicional> itens = dto.getItens().stream().map(itemDto -> {
+        List<ItemCondicional> itens = dto.getItens().stream().map(itemDto -> {
             Produto produto = produtoRepository.findById(itemDto.getProdutoId())
                     .orElseThrow(() -> new RuntimeException("Produto não encontrado ID: " + itemDto.getProdutoId()));
 
-            Condicional.ItemCondicional item = new Condicional.ItemCondicional();
+            ItemCondicional item = new ItemCondicional();
+            item.setCondicional(condicional);
             item.setProduto(produto);
             item.setQuantidade(itemDto.getQuantidade() != null ? itemDto.getQuantidade() : 1);
             item.setCorEscolhida(itemDto.getCorEscolhida());
@@ -176,7 +177,8 @@ public class CondicionalService {
             Produto produto = produtoRepository.findById(itemDTO.getProdutoId())
                     .orElseThrow(() -> new RuntimeException("Produto não encontrado: " + itemDTO.getProdutoId()));
 
-            Condicional.ItemCondicional item = new Condicional.ItemCondicional();
+            ItemCondicional item = new ItemCondicional();
+            item.setCondicional(condicional);
             item.setProduto(produto);
             item.setQuantidade(itemDTO.getQuantidade() != null ? itemDTO.getQuantidade() : 1);
             item.setCorEscolhida(itemDTO.getCorEscolhida());

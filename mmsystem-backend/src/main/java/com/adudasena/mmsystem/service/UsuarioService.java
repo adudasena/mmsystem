@@ -16,7 +16,6 @@ public class UsuarioService {
     private UsuarioRepository repository;
 
     public List<Usuario> listarTodos() {
-        // Usa o método de Soft Delete do seu Repository
         return repository.findByDeletedAtIsNull();
     }
 
