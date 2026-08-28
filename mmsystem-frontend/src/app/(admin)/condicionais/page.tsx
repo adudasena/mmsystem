@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, useCallback, useRef } from 'react';
 import { AxiosError } from 'axios';
 import api from '@/services/api';
 
@@ -68,6 +68,14 @@ export interface ItemBaixaTriagem {
   statusItem: 'VENDIDO' | 'DEVOLVIDA';
 }
 
+interface PageSpring<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
 interface ModalExcluirState {
   aberto: boolean;
   id: number | null;
@@ -83,6 +91,15 @@ const TelaCondicionais: React.FC = () => {
   const [clientes, setClientes] = useState<Usuario[]>([]);
   const [produtos, setProdutos] = useState<ProdutoCondicional[]>([]);
   
+  // Referência para Auto-Scroll
+  const tabelaRef = useRef<HTMLDivElement>(null);
+
+  // Estados de Paginação
+  const [paginaAtual, setPaginaAtual] = useState<number>(0);
+  const [totalPaginas, setTotalPaginas] = useState<number>(0);
+  const [totalElementos, setTotalElementos] = useState<number>(0);
+  const tamanhoPagina = 5;
+
   // Controle de Abas: 'ativas' ou 'finalizadas'
   const [abaAtiva, setAbaAtiva] = useState<'ativas' | 'finalizadas'>('ativas');
 
@@ -97,7 +114,7 @@ const TelaCondicionais: React.FC = () => {
   const [mensagemSucesso, setMensagemSucesso] = useState<string>('');
   const [editandoId, setEditandoId] = useState<number | null>(null);
 
-  // FORMULÁRIO: Sincronizado com o DTO do ecossistema Java
+  // FORMULÁRIO
   const [formCondicional, setFormCondicional] = useState<FormCondicional>({
     clienteId: '',
     dataSaida: new Date().toISOString().split('T')[0],
@@ -106,27 +123,66 @@ const TelaCondicionais: React.FC = () => {
     itens: [{ produtoId: '', quantidade: 1, corEscolhida: '', tamanhoEscolhido: '', statusItem: 'EM_CONDICIONAL' }]
   });
 
-  // ─── Carregar Dados (Previne erros do useEffect) ──────────────────────────
+  // ─── Busca Paginada de Condicionais ────────────────────────────────────────
+  const buscarCondicionais = useCallback(async (pagina: number = 0): Promise<void> => {
+    try {
+      const resCond = await api.get<PageSpring<Condicional> | Condicional[]>(`/condicionais?page=${pagina}&size=${tamanhoPagina}`);
+      if (resCond.data && Array.isArray((resCond.data as PageSpring<Condicional>).content)) {
+        const dados = resCond.data as PageSpring<Condicional>;
+        setListaCondicionais(dados.content);
+        setTotalPaginas(dados.totalPages);
+        setTotalElementos(dados.totalElements);
+        setPaginaAtual(dados.number);
+      } else if (Array.isArray(resCond.data)) {
+        setListaCondicionais(resCond.data);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar condicionais paginados:", err);
+      setListaCondicionais([]);
+    }
+  }, [tamanhoPagina]);
+
+  // ─── Carregar Dados Iniciais ────────────────────────────────────────────────
   useEffect(() => {
     let montado = true;
 
     const carregarDadosInicial = async () => {
       try {
         const [resCond, resCli, resProd] = await Promise.allSettled([
-          api.get<Condicional[]>('/condicionais'),
-          api.get<Usuario[]>('/usuarios'),
-          api.get<ProdutoCondicional[]>('/produtos')
+          api.get<PageSpring<Condicional> | Condicional[]>(`/condicionais?page=0&size=${tamanhoPagina}`),
+          api.get<PageSpring<Usuario> | Usuario[]>('/usuarios?size=1000'),
+          api.get<PageSpring<ProdutoCondicional> | ProdutoCondicional[]>('/produtos?size=1000')
         ]);
         
         if (montado) {
           if (resCond.status === 'fulfilled' && resCond.value.data) {
-            setListaCondicionais(resCond.value.data);
+            const data = resCond.value.data;
+            if (Array.isArray((data as PageSpring<Condicional>).content)) {
+              setListaCondicionais((data as PageSpring<Condicional>).content);
+              setTotalPaginas((data as PageSpring<Condicional>).totalPages);
+              setTotalElementos((data as PageSpring<Condicional>).totalElements);
+              setPaginaAtual((data as PageSpring<Condicional>).number);
+            } else if (Array.isArray(data)) {
+              setListaCondicionais(data);
+            }
           }
+
           if (resCli.status === 'fulfilled' && resCli.value.data) {
-            setClientes(resCli.value.data);
+            const dataCli = resCli.value.data;
+            if (Array.isArray((dataCli as PageSpring<Usuario>).content)) {
+              setClientes((dataCli as PageSpring<Usuario>).content);
+            } else if (Array.isArray(dataCli)) {
+              setClientes(dataCli);
+            }
           }
+
           if (resProd.status === 'fulfilled' && resProd.value.data) {
-            setProdutos(resProd.value.data);
+            const dataProd = resProd.value.data;
+            if (Array.isArray((dataProd as PageSpring<ProdutoCondicional>).content)) {
+              setProdutos((dataProd as PageSpring<ProdutoCondicional>).content);
+            } else if (Array.isArray(dataProd)) {
+              setProdutos(dataProd);
+            }
           }
         }
       } catch (err) {
@@ -139,27 +195,13 @@ const TelaCondicionais: React.FC = () => {
     return () => {
       montado = false;
     };
-  }, []);
+  }, [tamanhoPagina]);
 
-  const carregarDadosDoSistema = async (): Promise<void> => {
-    try {
-      const [resCond, resCli, resProd] = await Promise.allSettled([
-        api.get<Condicional[]>('/condicionais'),
-        api.get<Usuario[]>('/usuarios'),
-        api.get<ProdutoCondicional[]>('/produtos')
-      ]);
-      
-      if (resCond.status === 'fulfilled' && resCond.value.data) {
-        setListaCondicionais(resCond.value.data);
-      }
-      if (resCli.status === 'fulfilled' && resCli.value.data) {
-        setClientes(resCli.value.data);
-      }
-      if (resProd.status === 'fulfilled' && resProd.value.data) {
-        setProdutos(resProd.value.data);
-      }
-    } catch (err) {
-      console.error("Erro ao sincronizar ecossistema de dados:", err);
+  // ─── Navegação da Paginação com Auto-Scroll ──────────────────────────────
+  const mudarPagina = (novaPagina: number) => {
+    if (novaPagina >= 0 && novaPagina < totalPaginasCalculado) {
+      buscarCondicionais(novaPagina);
+      tabelaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -316,7 +358,7 @@ const TelaCondicionais: React.FC = () => {
         setMensagemSucesso("Nova sacola registrada com sucesso no sistema!");
       }
       setModalFormAberto(false);
-      carregarDadosDoSistema();
+      buscarCondicionais(paginaAtual);
 
       setTimeout(() => setMensagemSucesso(''), 3000);
     } catch (err) {
@@ -332,7 +374,7 @@ const TelaCondicionais: React.FC = () => {
       await api.delete(`/condicionais/${modalExcluir.id}`);
       setMensagemSucesso('Condicional removido com sucesso!');
       setModalExcluir({ aberto: false, id: null });
-      await carregarDadosDoSistema(); 
+      await buscarCondicionais(paginaAtual); 
 
       setTimeout(() => setMensagemSucesso(''), 4000);
     } catch {
@@ -363,7 +405,7 @@ const TelaCondicionais: React.FC = () => {
       setModalBaixaAberto(false);
       setSacolaParaBaixa(null);
       setMensagemSucesso("Baixa processada e armazenada no histórico de finalizados!");
-      carregarDadosDoSistema();
+      buscarCondicionais(paginaAtual);
       setTimeout(() => setMensagemSucesso(''), 4000);
     } catch (err) {
       console.error("Erro ao finalizar baixa no Spring Boot:", err);
@@ -371,31 +413,30 @@ const TelaCondicionais: React.FC = () => {
     }
   };
 
-  const listaFiltrada = listaCondicionais.filter(c => {
+  const listaFiltrada = (Array.isArray(listaCondicionais) ? listaCondicionais : []).filter(c => {
     if (abaAtiva === 'ativas') return c.status === 'ABERTA';
     return c.status === 'FINALIZADA' || c.status === 'DEVOLVIDA';
   });
 
- return (
-  <div className="space-y-6">
-    {/* Cabeçalho Padronizado */}
-    <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-      <div>
-        <h1 className="text-3xl font-serif font-bold text-[#2d3a22] tracking-wide">
-          Painel Administrativo - Condicionais
-        </h1>
-        <p className="text-xs text-gray-600 mt-1">
-          Gerenciamento refinado com triagem por variação e histórico separado.
-        </p>
-      </div>
+  const totalElementosCalculado = listaFiltrada.length;
+  const totalPaginasCalculado = Math.ceil(totalElementosCalculado / tamanhoPagina) || 1;
 
-      <button
-        onClick={abrirNovaSacolaForm}
-        className="bg-[#2d3a22] hover:bg-[#3d5427] text-white font-bold text-xs uppercase px-4 py-2.5 rounded-lg shadow-sm transition cursor-pointer self-start md:self-auto"
-      >
-        + Nova Sacola Condicional
-      </button>
-    </header>
+  return (
+    <div className="p-6 md:p-8 bg-[#dcded0] min-h-screen font-sans text-gray-800">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-[#2d3a22] tracking-wide">
+            Condicionais
+          </h1>
+        </div>
+
+        <button
+          onClick={abrirNovaSacolaForm}
+          className="bg-[#2d3a22] hover:bg-[#3d5427] text-white font-bold text-xs uppercase px-4 py-2.5 rounded-lg shadow-sm transition cursor-pointer self-start md:self-auto"
+        >
+          + Nova Sacola Condicional
+        </button>
+      </header>
 
       {mensagemSucesso && (
         <div className="mb-4 bg-green-50 border-l-4 border-green-600 p-3 text-green-900 font-semibold text-xs max-w-5xl rounded-sm">
@@ -406,13 +447,13 @@ const TelaCondicionais: React.FC = () => {
       {/* SEPARADOR DE TELAS (ABAS) */}
       <div className="flex gap-2 mb-4 max-w-5xl border-b border-gray-400">
         <button 
-          onClick={() => setAbaAtiva('ativas')}
+          onClick={() => { setAbaAtiva('ativas'); setPaginaAtual(0); }}
           className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition cursor-pointer ${abaAtiva === 'ativas' ? 'border-b-2 border-[#4a5d33] text-black font-extrabold bg-white/40' : 'text-gray-500 hover:text-black'}`}
         >
           👜 Condicionais Ativos ({listaCondicionais.filter(c => c.status === 'ABERTA').length})
         </button>
         <button 
-          onClick={() => setAbaAtiva('finalizadas')}
+          onClick={() => { setAbaAtiva('finalizadas'); setPaginaAtual(0); }}
           className={`px-4 py-2 text-xs font-bold uppercase tracking-wider transition cursor-pointer ${abaAtiva === 'finalizadas' ? 'border-b-2 border-[#4a5d33] text-black font-extrabold bg-white/40' : 'text-gray-500 hover:text-black'}`}
         >
           ✅ Histórico de Finalizados ({listaCondicionais.filter(c => c.status !== 'ABERTA').length})
@@ -420,7 +461,7 @@ const TelaCondicionais: React.FC = () => {
       </div>
 
       {/* TABELA DE REGISTROS */}
-      <section className="bg-white rounded-sm shadow-sm border border-gray-300 overflow-hidden max-w-5xl">
+      <section ref={tabelaRef} className="bg-white rounded-sm shadow-sm border border-gray-300 overflow-hidden max-w-5xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -482,6 +523,58 @@ const TelaCondicionais: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* BARRA DE PAGINAÇÃO NO RODAPÉ */}
+        {totalPaginasCalculado > 1 && (
+          <div className="p-4 bg-gray-50 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+            <span>
+              Página <strong>{paginaAtual + 1}</strong> de <strong>{totalPaginasCalculado}</strong> (Total: {totalElementosCalculado} itens)
+            </span>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => mudarPagina(paginaAtual - 1)}
+                disabled={paginaAtual === 0}
+                className="px-3 py-1.5 border rounded font-bold uppercase bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              >
+                ← Anterior
+              </button>
+
+              {/* Botões Numéricos de Páginas */}
+              {Array.from({ length: totalPaginasCalculado }, (_, index) => {
+                if (index === 0 || index === totalPaginasCalculado - 1 || Math.abs(index - paginaAtual) <= 1) {
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => mudarPagina(index)}
+                      className={`px-3 py-1.5 border rounded font-bold text-xs cursor-pointer transition ${
+                        paginaAtual === index
+                          ? 'bg-[#4a5d33] text-white border-[#4a5d33]'
+                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                } else if (
+                  (index === 1 && paginaAtual > 2) ||
+                  (index === totalPaginasCalculado - 2 && paginaAtual < totalPaginasCalculado - 3)
+                ) {
+                  return <span key={index} className="px-1 text-gray-400">...</span>;
+                }
+                return null;
+              })}
+
+              <button
+                onClick={() => mudarPagina(paginaAtual + 1)}
+                disabled={paginaAtual >= totalPaginasCalculado - 1}
+                className="px-3 py-1.5 border rounded font-bold uppercase bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              >
+                Próxima →
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* MODAL: FORMULÁRIO DE CRIAÇÃO E EDIÇÃO */}

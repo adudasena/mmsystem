@@ -32,6 +32,14 @@ export interface ItemCarrinho {
   imagemUrl?: string;
 }
 
+interface PageSpring<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
 interface ApiErrorResponse {
   message?: string;
   erro?: string;
@@ -54,7 +62,7 @@ export default function VitrineProdutos() {
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [mostrarCarrinho, setMostrarCarrinho] = useState<boolean>(false);
 
-  // ─── Efeito de Inicialização (Axios) ───
+  // ─── Efeito de Inicialização Compatível com Paginação ───
   useEffect(() => {
     let montado = true;
 
@@ -62,14 +70,25 @@ export default function VitrineProdutos() {
       try {
         setLoading(true);
         setErro(null);
-        const res = await api.get<ProdutoVitrine[]>('/produtos');
+        // Busca 50 itens para preencher a vitrine inicial
+        const res = await api.get<PageSpring<ProdutoVitrine> | ProdutoVitrine[]>('/produtos?size=50');
+        
         if (montado) {
-          setProdutos(res.data || []);
+          if (res.data && Array.isArray((res.data as PageSpring<ProdutoVitrine>).content)) {
+            // Trata o objeto paginado do Spring Data
+            setProdutos((res.data as PageSpring<ProdutoVitrine>).content);
+          } else if (Array.isArray(res.data)) {
+            // Trata resposta como lista simples se não for paginado
+            setProdutos(res.data);
+          } else {
+            setProdutos([]);
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar catálogo da vitrine via Axios:', err);
         if (montado) {
           setErro('Não foi possível carregar o catálogo de produtos.');
+          setProdutos([]);
         }
       } finally {
         if (montado) {
@@ -157,8 +176,8 @@ export default function VitrineProdutos() {
     }
   };
 
-  // Filtragem local
-  const produtosFiltrados = produtos.filter((p) => {
+  // Filtragem local segura com Array.isArray
+  const produtosFiltrados = (Array.isArray(produtos) ? produtos : []).filter((p) => {
     const atendeCategoria = !categoriaFiltro || p.categoria === categoriaFiltro;
     return atendeCategoria;
   });
@@ -233,62 +252,68 @@ export default function VitrineProdutos() {
 
         {!loading && !erro && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {produtosFiltrados.map((prod) => {
-              const srcFoto = obterImagemUrl(prod);
+            {produtosFiltrados.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-gray-500 italic">
+                Nenhum produto encontrado para esta categoria.
+              </div>
+            ) : (
+              produtosFiltrados.map((prod) => {
+                const srcFoto = obterImagemUrl(prod);
 
-              return (
-                <div
-                  key={prod.id}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between border border-gray-200/60 p-2"
-                >
-                  <div>
-                    {/* CONTAINER DA IMAGEM */}
-                    <div className="h-56 bg-gray-100 rounded-xl overflow-hidden relative mb-2 flex items-center justify-center text-gray-400">
-                      {srcFoto ? (
-                        <img
-                          src={srcFoto}
-                          alt={prod.nome}
-                          className="w-full h-full object-cover"
-                          onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">Sem imagem</span>
-                      )}
-
-                      {/* BADGE DE STATUS */}
-                      <span className="absolute bottom-2 left-2 bg-[#b2c082] text-[#2c3e1c] text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shadow-sm">
-                        {(prod.quantidadeEstoque ?? 1) > 0
-                          ? `${prod.quantidadeEstoque || 2} DISPONÍVEIS`
-                          : 'EM CONDICIONAL'}
-                      </span>
-                    </div>
-
-                    {/* INFO DO PRODUTO */}
-                    <div className="px-1">
-                      <h3 className="font-semibold text-sm text-gray-900 truncate">{prod.nome}</h3>
-                      <p className="text-xs font-bold text-gray-800 mb-2">
-                        R$ {Number(prod.preco || 0).toFixed(2).replace('.', ',')}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* BOTÃO DE AÇÃO */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProdutoSelecionado(prod);
-                      setCor('Padrão');
-                      setTamanho('M');
-                    }}
-                    className="w-full bg-[#2c3e1c] hover:bg-[#3d5427] text-white font-medium py-2 rounded-xl text-xs transition shadow-sm cursor-pointer"
+                return (
+                  <div
+                    key={prod.id}
+                    className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between border border-gray-200/60 p-2"
                   >
-                    Ver Detalhes / Comprar
-                  </button>
-                </div>
-              );
-            })}
+                    <div>
+                      {/* CONTAINER DA IMAGEM */}
+                      <div className="h-56 bg-gray-100 rounded-xl overflow-hidden relative mb-2 flex items-center justify-center text-gray-400">
+                        {srcFoto ? (
+                          <img
+                            src={srcFoto}
+                            alt={prod.nome}
+                            className="w-full h-full object-cover"
+                            onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Sem imagem</span>
+                        )}
+
+                        {/* BADGE DE STATUS */}
+                        <span className="absolute bottom-2 left-2 bg-[#b2c082] text-[#2c3e1c] text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase shadow-sm">
+                          {(prod.quantidadeEstoque ?? 1) > 0
+                            ? `${prod.quantidadeEstoque || 2} DISPONÍVEIS`
+                            : 'EM CONDICIONAL'}
+                        </span>
+                      </div>
+
+                      {/* INFO DO PRODUTO */}
+                      <div className="px-1">
+                        <h3 className="font-semibold text-sm text-gray-900 truncate">{prod.nome}</h3>
+                        <p className="text-xs font-bold text-gray-800 mb-2">
+                          R$ {Number(prod.preco || 0).toFixed(2).replace('.', ',')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* BOTÃO DE AÇÃO */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProdutoSelecionado(prod);
+                        setCor('Padrão');
+                        setTamanho('M');
+                      }}
+                      className="w-full bg-[#2c3e1c] hover:bg-[#3d5427] text-white font-medium py-2 rounded-xl text-xs transition shadow-sm cursor-pointer"
+                    >
+                      Ver Detalhes / Comprar
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
       </section>

@@ -8,6 +8,8 @@ import com.adudasena.mmsystem.repository.ProdutoRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -68,6 +70,10 @@ public class ProdutoService {
         repository.save(produto);
     }
 
+    public Page<Produto> listarTodos(Pageable pageable) {
+        return repository.findByDeletedAtIsNull(pageable);
+    }
+
     // Listar apenas o que está na lixeira
     public List<Produto> listarExcluidos() {
         return repository.findByDeletedAtIsNotNull();
@@ -85,4 +91,6 @@ public class ProdutoService {
         produto.setFotos(objectMapper.writeValueAsString(dto.getFotos()));
         return repository.save(produto);
     }
+
+
 }

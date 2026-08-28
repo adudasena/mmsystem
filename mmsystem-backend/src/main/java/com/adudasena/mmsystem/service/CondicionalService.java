@@ -7,9 +7,10 @@ import com.adudasena.mmsystem.repository.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -17,6 +18,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class CondicionalService {
@@ -35,6 +38,10 @@ public class CondicionalService {
 
     public List<Condicional> listarTodos() {
         return repository.findAll();
+    }
+
+    public Page<Condicional> listarTodos(Pageable pageable) {
+        return repository.findByDeletedAtIsNull(pageable);
     }
 
     public Condicional buscarPorId(Long id) {

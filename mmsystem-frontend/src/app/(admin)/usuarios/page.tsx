@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent, useRef } from 'react';
 import { AxiosError } from 'axios';
 import api from '@/services/api';
 
@@ -21,6 +21,14 @@ export interface FormDataUsuario {
   perfil: string;
 }
 
+interface PageSpring<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
 interface ApiErrorResponse {
   message?: string;
   erro?: string;
@@ -33,6 +41,15 @@ const TelaUsuarios: React.FC = () => {
   const [erro, setErro] = useState<string>('');
   const [busca, setBusca] = useState<string>('');
 
+  // Referência para Auto-Scroll na tabela
+  const tabelaRef = useRef<HTMLDivElement>(null);
+
+  // Estados de Paginação
+  const [paginaAtual, setPaginaAtual] = useState<number>(0);
+  const [totalPaginas, setTotalPaginas] = useState<number>(0);
+  const [totalElementos, setTotalElementos] = useState<number>(0);
+  const tamanhoPagina = 5;
+
   // Estado para controle de edição
   const [clienteEmEdicao, setClienteEmEdicao] = useState<Usuario | null>(null);
 
@@ -44,16 +61,27 @@ const TelaUsuarios: React.FC = () => {
     perfil: 'CLIENTE',
   });
 
-  // ─── Efeito de Inicialização (Evita re-renders e warnings no React) ──────
+  // ─── Efeito de Inicialização Segura ───────────────────────────────────────
   useEffect(() => {
     let montado = true;
 
     const carregarInicial = async () => {
       try {
         setLoading(true);
-        const res = await api.get<Usuario[]>('/usuarios');
+        const res = await api.get<PageSpring<Usuario> | Usuario[]>(`/usuarios?page=0&size=${tamanhoPagina}`);
+        
         if (montado) {
-          setClientes(res.data || []);
+          if (res.data && Array.isArray((res.data as PageSpring<Usuario>).content)) {
+            const dados = res.data as PageSpring<Usuario>;
+            setClientes(dados.content);
+            setTotalPaginas(dados.totalPages);
+            setTotalElementos(dados.totalElements);
+            setPaginaAtual(dados.number);
+          } else if (Array.isArray(res.data)) {
+            setClientes(res.data);
+          } else {
+            setClientes([]);
+          }
         }
       } catch (err) {
         console.error('Erro ao buscar clientes:', err);
@@ -72,18 +100,38 @@ const TelaUsuarios: React.FC = () => {
     return () => {
       montado = false;
     };
-  }, []);
+  }, [tamanhoPagina]);
 
-  const carregarClientes = async (): Promise<void> => {
+  // ─── Função de Busca Paginada ──────────────────────────────────────────────
+  const buscarClientesPagina = async (pagina: number = 0): Promise<void> => {
     try {
       setLoading(true);
-      const res = await api.get<Usuario[]>('/usuarios');
-      setClientes(res.data || []);
+      const res = await api.get<PageSpring<Usuario> | Usuario[]>(`/usuarios?page=${pagina}&size=${tamanhoPagina}`);
+      
+      if (res.data && Array.isArray((res.data as PageSpring<Usuario>).content)) {
+        const dados = res.data as PageSpring<Usuario>;
+        setClientes(dados.content);
+        setTotalPaginas(dados.totalPages);
+        setTotalElementos(dados.totalElements);
+        setPaginaAtual(dados.number);
+      } else if (Array.isArray(res.data)) {
+        setClientes(res.data);
+      } else {
+        setClientes([]);
+      }
     } catch (err) {
-      console.error('Erro ao buscar clientes:', err);
+      console.error('Erro ao carregar clientes:', err);
       setErro('Não foi possível carregar a lista de clientes.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ─── Navegação com Auto-Scroll ───────────────────────────────────────────
+  const mudarPagina = (novaPagina: number) => {
+    if (novaPagina >= 0 && novaPagina < totalPaginas) {
+      buscarClientesPagina(novaPagina);
+      tabelaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -144,7 +192,7 @@ const TelaUsuarios: React.FC = () => {
       }
 
       handleCancelarEdicao();
-      carregarClientes();
+      buscarClientesPagina(paginaAtual);
       setTimeout(() => setMensagemSucesso(''), 4000);
     } catch (err) {
       const erroAxios = err as AxiosError<ApiErrorResponse>;
@@ -162,7 +210,7 @@ const TelaUsuarios: React.FC = () => {
       try {
         await api.delete(`/usuarios/${id}`);
         setMensagemSucesso('Cliente removido com sucesso!');
-        carregarClientes();
+        buscarClientesPagina(paginaAtual);
         setTimeout(() => setMensagemSucesso(''), 4000);
       } catch (err) {
         console.error('Erro ao excluir cliente:', err);
@@ -178,8 +226,8 @@ const TelaUsuarios: React.FC = () => {
     return `https://wa.me/55${numLimpo}`;
   };
 
-  // Filtro da busca
-  const clientesFiltrados = clientes.filter(
+  // Filtro local resiliente
+  const clientesFiltrados = (Array.isArray(clientes) ? clientes : []).filter(
     (c) =>
       c.nome?.toLowerCase().includes(busca.toLowerCase()) ||
       c.telefone?.includes(busca) ||
@@ -192,14 +240,11 @@ const TelaUsuarios: React.FC = () => {
         {/* CABEÇALHO */}
         <div>
           <h1 className="text-3xl font-serif font-bold text-[#2d3a22]">
-            Painel Administrativo - Clientes
+            Clientes
           </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            Gerenciamento e histórico de relacionamento com as clientes da loja.
-          </p>
         </div>
 
-        {/* MÉTRICAS REAIS */}
+        {/* MÉTRICAS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200/80 flex items-center gap-4">
             <div className="p-3 bg-[#e8eae0] text-[#3b4a28] rounded-lg text-xl">👥</div>
@@ -207,7 +252,9 @@ const TelaUsuarios: React.FC = () => {
               <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">
                 Base Total de Clientes
               </p>
-              <h3 className="text-2xl font-extrabold text-gray-800">{clientes.length}</h3>
+              <h3 className="text-2xl font-extrabold text-gray-800">
+                {totalElementos > 0 ? totalElementos : clientes.length}
+              </h3>
             </div>
           </div>
 
@@ -236,7 +283,7 @@ const TelaUsuarios: React.FC = () => {
           </div>
         </div>
 
-        {/* FEEDBACKS DE MENSAGENS */}
+        {/* MENSAGENS */}
         {mensagemSucesso && (
           <div className="bg-green-100 border border-green-400 text-green-800 px-4 py-3 rounded-lg text-xs font-bold shadow-sm">
             {mensagemSucesso}
@@ -248,9 +295,9 @@ const TelaUsuarios: React.FC = () => {
           </div>
         )}
 
-        {/* CONTEÚDO PRINCIPAL (FORMULÁRIO + TABELA) */}
+        {/* CONTEÚDO PRINCIPAL */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* FORMULÁRIO (CADASTRAR OU EDITAR) */}
+          {/* FORMULÁRIO */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-[#3b4a28]">
@@ -325,14 +372,14 @@ const TelaUsuarios: React.FC = () => {
           </div>
 
           {/* TABELA DE CLIENTES */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div ref={tabelaRef} className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-4 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-center gap-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-gray-700">
-                Clientes Cadastrados ({clientesFiltrados.length})
+                Clientes Cadastrados ({totalElementos > 0 ? totalElementos : clientesFiltrados.length})
               </h2>
               <input
                 type="text"
-                placeholder="🔍 Buscar por nome, whats ou email..."
+                placeholder="Buscar por nome, whats ou email..."
                 value={busca}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setBusca(e.target.value)}
                 className="w-full sm:w-64 border border-gray-300 px-3 py-1.5 text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-[#3b4a28]"
@@ -347,7 +394,7 @@ const TelaUsuarios: React.FC = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-[#cbd0c0] font-bold uppercase text-gray-700">
+                    <tr className="bg-[#cbd0c0] font-bold uppercase text-gray-700 border-b border-gray-300">
                       <th className="p-3 border-r border-gray-300/50">ID</th>
                       <th className="p-3 border-r border-gray-300/50">Nome</th>
                       <th className="p-3 border-r border-gray-300/50">WhatsApp</th>
@@ -373,7 +420,6 @@ const TelaUsuarios: React.FC = () => {
                           <td className="p-3 border-r text-gray-600">{cli.email || '—'}</td>
                           <td className="p-3 text-center">
                             <div className="flex items-center justify-center gap-1.5">
-                              {/* BOTAO WHATSAPP */}
                               {cli.telefone ? (
                                 <a
                                   href={linkWhatsApp(cli.telefone)}
@@ -386,7 +432,6 @@ const TelaUsuarios: React.FC = () => {
                                 </a>
                               ) : null}
 
-                              {/* BOTAO EDITAR */}
                               <button
                                 type="button"
                                 onClick={() => handleEditar(cli)}
@@ -396,7 +441,6 @@ const TelaUsuarios: React.FC = () => {
                                 ✏️ Editar
                               </button>
 
-                              {/* BOTAO EXCLUIR */}
                               <button
                                 type="button"
                                 onClick={() => handleExcluir(cli.id, cli.nome)}
@@ -412,6 +456,57 @@ const TelaUsuarios: React.FC = () => {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* BARRA DE PAGINAÇÃO NO RODAPÉ */}
+            {totalPaginas > 1 && (
+              <div className="p-4 bg-gray-50 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+                <span>
+                  Página <strong>{paginaAtual + 1}</strong> de <strong>{totalPaginas}</strong> (Total: {totalElementos} itens)
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => mudarPagina(paginaAtual - 1)}
+                    disabled={paginaAtual === 0}
+                    className="px-3 py-1.5 border rounded font-bold uppercase bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                  >
+                    ← Anterior
+                  </button>
+
+                  {Array.from({ length: totalPaginas }, (_, index) => {
+                    if (index === 0 || index === totalPaginas - 1 || Math.abs(index - paginaAtual) <= 1) {
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => mudarPagina(index)}
+                          className={`px-3 py-1.5 border rounded font-bold text-xs cursor-pointer transition ${
+                            paginaAtual === index
+                              ? 'bg-[#4a5d33] text-white border-[#4a5d33]'
+                              : 'bg-white text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          {index + 1}
+                        </button>
+                      );
+                    } else if (
+                      (index === 1 && paginaAtual > 2) ||
+                      (index === totalPaginas - 2 && paginaAtual < totalPaginas - 3)
+                    ) {
+                      return <span key={index} className="px-1 text-gray-400">...</span>;
+                    }
+                    return null;
+                  })}
+
+                  <button
+                    onClick={() => mudarPagina(paginaAtual + 1)}
+                    disabled={paginaAtual >= totalPaginas - 1}
+                    className="px-3 py-1.5 border rounded font-bold uppercase bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                  >
+                    Próxima →
+                  </button>
+                </div>
               </div>
             )}
           </div>

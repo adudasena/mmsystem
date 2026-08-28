@@ -7,6 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/condicionais")
@@ -17,8 +21,12 @@ public class CondicionalController {
     private CondicionalService service;
 
     @GetMapping
-    public List<Condicional> listar() {
-        return service.listarTodos();
+    public ResponseEntity<Page<Condicional>> listarTodos(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        return ResponseEntity.ok(service.listarTodos(pageable));
     }
 
     @GetMapping("/{id}")

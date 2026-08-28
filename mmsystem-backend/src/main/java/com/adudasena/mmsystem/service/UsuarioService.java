@@ -1,5 +1,7 @@
 package com.adudasena.mmsystem.service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import com.adudasena.mmsystem.dto.UsuarioDTO;
 import com.adudasena.mmsystem.model.Usuario;
 import com.adudasena.mmsystem.repository.UsuarioRepository;
@@ -14,6 +16,10 @@ public class UsuarioService {
 
     @Autowired
     private UsuarioRepository repository;
+
+    public Page<Usuario> listarTodos(Pageable pageable) {
+        return repository.findByDeletedAtIsNull(pageable);
+    }
 
     public List<Usuario> listarTodos() {
         return repository.findByDeletedAtIsNull();

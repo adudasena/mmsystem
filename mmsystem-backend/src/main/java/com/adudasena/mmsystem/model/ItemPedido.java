@@ -1,21 +1,26 @@
 package com.adudasena.mmsystem.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 
 @Entity
 @Table(name = "itens_pedido")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class ItemPedido {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "fk_pedido_id", nullable = false)
+    @JsonIgnore // Evita o loop de recursão infinita na serialização do JSON
     private Pedido pedido;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER) // Carrega os dados do produto junto com o item
     @JoinColumn(name = "fk_produto_id", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Produto produto;
 
     @Column(nullable = false)
@@ -23,7 +28,6 @@ public class ItemPedido {
 
     public ItemPedido() {}
 
-    // Getters e Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 

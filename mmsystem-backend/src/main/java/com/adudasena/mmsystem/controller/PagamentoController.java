@@ -4,9 +4,16 @@ import com.adudasena.mmsystem.dto.PagamentoDTO;
 import com.adudasena.mmsystem.enums.MetodoPagamento;
 import com.adudasena.mmsystem.model.Pagamento;
 import com.adudasena.mmsystem.model.Pedido;
+import com.adudasena.mmsystem.model.Produto;
 import com.adudasena.mmsystem.repository.PagamentoRepository;
 import com.adudasena.mmsystem.repository.PedidoRepository;
+import com.adudasena.mmsystem.service.PagamentoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,9 +29,34 @@ public class PagamentoController {
     @Autowired
     private PedidoRepository pedidoRepository;
 
+    @Autowired
+    private PagamentoService service;
+
     @GetMapping
-    public List<Pagamento> listar() {
-        return pagamentoRepository.findAll();
+    public ResponseEntity<Page<Pagamento>> listarTodos(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        return ResponseEntity.ok(service.listarTodos(pageable));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Pagamento> atualizar(@PathVariable Long id, @RequestBody PagamentoDTO dto) {
+        Pagamento pagamentoAtualizado = service.atualizar(id, dto);
+        if (pagamentoAtualizado == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(pagamentoAtualizado);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable Long id) {
+        boolean deletado = service.excluir(id);
+        if (!deletado) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping

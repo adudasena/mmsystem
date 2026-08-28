@@ -1,20 +1,17 @@
 package com.adudasena.mmsystem.controller;
 
-import com.adudasena.mmsystem.dto.ItemPedidoDTO;
 import com.adudasena.mmsystem.dto.PedidoDTO;
-import com.adudasena.mmsystem.enums.StatusPedido; // Import adicionado
-import com.adudasena.mmsystem.model.ItemPedido;
 import com.adudasena.mmsystem.model.Pedido;
-import com.adudasena.mmsystem.model.Produto;
-import com.adudasena.mmsystem.model.Usuario;
-import com.adudasena.mmsystem.repository.PedidoRepository;
-import com.adudasena.mmsystem.repository.ProdutoRepository;
-import com.adudasena.mmsystem.repository.UsuarioRepository;
+import com.adudasena.mmsystem.service.PedidoService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/pedidos")
@@ -22,56 +19,57 @@ import java.util.List;
 public class PedidoController {
 
     @Autowired
-    private PedidoRepository pedidoRepository;
-
-    @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    @Autowired
-    private ProdutoRepository produtoRepository;
+    private PedidoService service;
 
     @GetMapping
-    public List<Pedido> listar() {
-        return pedidoRepository.findAll();
-    }
-
-    @PostMapping
-    public Pedido salvar(@RequestBody PedidoDTO dto) {
-        Pedido pedido = new Pedido();
-        pedido.setDataPedido(dto.getDataPedido());
-
-        // Conversão de String para Enum StatusPedido
-        if (dto.getStatus() != null) {
-            pedido.setStatus(StatusPedido.valueOf(dto.getStatus()));
-        }
-
-        pedido.setValorTotal(dto.getValorTotal());
-
-        if (dto.getFkClienteId() != null) {
-            Usuario cliente = usuarioRepository.findById(dto.getFkClienteId()).orElse(null);
-            pedido.setCliente(cliente);
-        }
-
-        List<ItemPedido> itens = new ArrayList<>();
-        if (dto.getItens() != null) {
-            for (ItemPedidoDTO itemDto : dto.getItens()) {
-                Produto produto = produtoRepository.findById(itemDto.getFkProdutoId()).orElse(null);
-
-                ItemPedido item = new ItemPedido();
-                item.setPedido(pedido);
-                item.setProduto(produto);
-                item.setQuantidade(itemDto.getQuantidade());
-
-                itens.add(item);
-            }
-        }
-        pedido.setItens(itens);
-
-        return pedidoRepository.save(pedido);
+    public ResponseEntity<Page<Pedido>> listarTodos(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        return ResponseEntity.ok(service.listarTodos(pageable));
     }
 
     @GetMapping("/{id}")
-    public Pedido buscarPorId(@PathVariable Long id) {
-        return pedidoRepository.findById(id).orElse(null);
+    public ResponseEntity<Pedido> buscarPorId(@PathVariable Long id) {
+        Pedido pedido = service.buscarPorId(id);
+        if (pedido == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(pedido);
+    }
+
+    @PostMapping
+    public ResponseEntity<Pedido> salvar(@RequestBody PedidoDTO dto) {
+        Pedido novoPedido = service.salvar(dto);
+        return ResponseEntity.status(201).body(novoPedido);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Pedido> atualizar(@PathVariable Long id, @RequestBody PedidoDTO dto) {
+        Pedido pedidoAtualizado = service.atualizar(id, dto);
+        if (pedidoAtualizado == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(pedidoAtualizado);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Pedido> atualizarStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String novoStatus = body.get("status");
+        Pedido pedidoAtualizado = service.atualizarStatus(id, novoStatus);
+        if (pedidoAtualizado == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(pedidoAtualizado);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable Long id) {
+        boolean deletado = service.excluir(id);
+        if (!deletado) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.noContent().build();
     }
 }

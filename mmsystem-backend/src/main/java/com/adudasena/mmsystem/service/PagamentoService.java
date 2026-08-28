@@ -7,9 +7,10 @@ import com.adudasena.mmsystem.model.Pedido;
 import com.adudasena.mmsystem.repository.PagamentoRepository;
 import com.adudasena.mmsystem.repository.PedidoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PagamentoService {
@@ -20,26 +21,60 @@ public class PagamentoService {
     @Autowired
     private PedidoRepository pedidoRepository;
 
-    public List<Pagamento> listar() {
-        return pagamentoRepository.findAll();
+    @Transactional(readOnly = true)
+    public Page<Pagamento> listarTodos(Pageable pageable) {
+        return pagamentoRepository.findAll(pageable);
     }
 
+    @Transactional(readOnly = true)
+    public Pagamento buscarPorId(Long id) {
+        return pagamentoRepository.findById(id).orElse(null);
+    }
+
+    @Transactional
     public Pagamento salvar(PagamentoDTO dto) {
         Pagamento pagamento = new Pagamento();
+        preencherDadosPagamento(pagamento, dto);
+        return pagamentoRepository.save(pagamento);
+    }
+
+    @Transactional
+    public Pagamento atualizar(Long id, PagamentoDTO dto) {
+        Pagamento pagamentoExistente = buscarPorId(id);
+        if (pagamentoExistente == null) {
+            return null;
+        }
+        preencherDadosPagamento(pagamentoExistente, dto);
+        return pagamentoRepository.save(pagamentoExistente);
+    }
+
+    @Transactional
+    public boolean excluir(Long id) {
+        if (pagamentoRepository.existsById(id)) {
+            pagamentoRepository.deleteById(id);
+            return true;
+        }
+        return false;
+    }
+
+    private void preencherDadosPagamento(Pagamento pagamento, PagamentoDTO dto) {
         pagamento.setValor(dto.getValor());
+        pagamento.setDataVencimento(dto.getDataVencimento());
+        pagamento.setStatus(dto.getStatus() != null ? dto.getStatus().toUpperCase() : "PENDENTE");
 
         if (dto.getMetodoPagamento() != null) {
-            pagamento.setMetodoPagamento(MetodoPagamento.valueOf(dto.getMetodoPagamento()));
+            try {
+                pagamento.setMetodoPagamento(MetodoPagamento.valueOf(dto.getMetodoPagamento().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                pagamento.setMetodoPagamento(MetodoPagamento.PIX);
+            }
         }
-
-        pagamento.setDataVencimento(dto.getDataVencimento());
-        pagamento.setStatus(dto.getStatus());
 
         if (dto.getFkPedidoId() != null) {
             Pedido pedido = pedidoRepository.findById(dto.getFkPedidoId()).orElse(null);
             pagamento.setPedido(pedido);
+        } else {
+            pagamento.setPedido(null);
         }
-
-        return pagamentoRepository.save(pagamento);
     }
 }

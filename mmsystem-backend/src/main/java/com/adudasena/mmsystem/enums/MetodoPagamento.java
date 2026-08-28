@@ -5,5 +5,6 @@ public enum MetodoPagamento {
     CARTAO_CREDITO,
     CARTAO_DEBITO,
     DINHEIRO,
-    PAGAMENTO_FUTURO
+    PAGAMENTO_FUTURO,
+    BOLETO
 }

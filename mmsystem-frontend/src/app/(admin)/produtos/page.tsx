@@ -1,7 +1,7 @@
 'use client';
 
 /* eslint-disable @next/next/no-img-element */
-import React, { useState, useEffect, ChangeEvent, KeyboardEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, KeyboardEvent, useCallback, useRef } from 'react';
 import { AxiosError } from 'axios';
 import api from '@/services/api';
 
@@ -24,6 +24,14 @@ interface Produto {
   status?: string;
   coresC?: string[];
   tamanhosC?: string[];
+}
+
+interface PageSpring<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
 }
 
 interface ModalDetalhes {
@@ -65,6 +73,15 @@ const TelaProdutos: React.FC = () => {
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [listaProdutos, setListaProdutos] = useState<Produto[]>([]);
 
+  // ─── Referência para Auto-Scroll da Tabela ───────────────────────────────
+  const tabelaRef = useRef<HTMLDivElement>(null);
+
+  // ─── Estados de Paginação (Ajustado para 5 por página) ─────────────────────
+  const [paginaAtual, setPaginaAtual] = useState<number>(0);
+  const [totalPaginas, setTotalPaginas] = useState<number>(0);
+  const [totalElementos, setTotalElementos] = useState<number>(0);
+  const tamanhoPagina = 5;
+
   const [mensagemSucesso, setMensagemSucesso] = useState<string>('');
   const [errosValidacao, setErrosValidacao] = useState<string[]>([]);
 
@@ -83,27 +100,48 @@ const TelaProdutos: React.FC = () => {
     fotos: []
   });
 
-  // ─── Opções customizáveis — persistidas no localStorage ───────────────────
+  // ─── Opções customizáveis ──────────────────────────────────────────────────
   const [tamanhos, setTamanhos] = useState<string[]>(() => lerStorage<string[]>('mm_tamanhos', TAMANHOS_PADRAO));
   const [categorias, setCategorias] = useState<string[]>(() => lerStorage<string[]>('mm_categorias', CATEGORIAS_PADRAO));
   const [listaCores, setListaCores] = useState<Cor[]>(() => lerStorage<Cor[]>('mm_cores', CORES_PADRAO));
 
-  // ─── Para visualizar os produtos excluídos - lixeira ───────────────────
+  // ─── Lixeira / Removidos ──────────────────────────────────────────────────
   const [produtosExcluidos, setProdutosExcluidos] = useState<Produto[]>([]);
   const [visualizandoExcluidos, setVisualizandoExcluidos] = useState<boolean>(false);
 
-  // ─── Efeito de inicialização (Previne erro de setState e re-render) ───────
+  // ─── Busca Paginada de Produtos ───────────────────────────────────────────
+  const buscarProdutos = useCallback(async (pagina: number = 0): Promise<void> => {
+    try {
+      const resposta = await api.get<PageSpring<Produto>>(`/produtos?page=${pagina}&size=${tamanhoPagina}`);
+      if (resposta.data && Array.isArray(resposta.data.content)) {
+        setListaProdutos(resposta.data.content);
+        setTotalPaginas(resposta.data.totalPages);
+        setTotalElementos(resposta.data.totalElements);
+        setPaginaAtual(resposta.data.number);
+      } else if (Array.isArray(resposta.data)) {
+        setListaProdutos(resposta.data);
+      }
+    } catch (erro) {
+      console.error('Erro ao buscar produtos paginados:', erro);
+      setListaProdutos([]);
+    }
+  }, [tamanhoPagina]);
+
+  // ─── Efeito de Inicialização Segura ───────────────────────────────────────
   useEffect(() => {
     let montado = true;
 
     const carregarInicial = async () => {
       try {
-        const resposta = await api.get<Produto[]>('/produtos');
-        if (montado) {
-          setListaProdutos(resposta.data);
+        const resposta = await api.get<PageSpring<Produto>>(`/produtos?page=0&size=${tamanhoPagina}`);
+        if (montado && resposta.data && Array.isArray(resposta.data.content)) {
+          setListaProdutos(resposta.data.content);
+          setTotalPaginas(resposta.data.totalPages);
+          setTotalElementos(resposta.data.totalElements);
+          setPaginaAtual(resposta.data.number);
         }
       } catch (erro) {
-        console.error('Erro ao buscar produtos:', erro);
+        console.error('Erro ao carregar inicial de produtos:', erro);
       }
     };
 
@@ -112,15 +150,13 @@ const TelaProdutos: React.FC = () => {
     return () => {
       montado = false;
     };
-  }, []);
+  }, [tamanhoPagina]);
 
-  // ─── Reutilizável para recarregar após salvar/excluir ──────────────────────
-  const buscarProdutos = async (): Promise<void> => {
-    try {
-      const resposta = await api.get<Produto[]>('/produtos');
-      setListaProdutos(resposta.data);
-    } catch (erro) {
-      console.error('Erro ao buscar produtos:', erro);
+  // ─── Navegação da Paginação com Auto-Scroll ──────────────────────────────
+  const mudarPagina = (novaPagina: number) => {
+    if (novaPagina >= 0 && novaPagina < totalPaginas) {
+      buscarProdutos(novaPagina);
+      tabelaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
@@ -292,7 +328,7 @@ const TelaProdutos: React.FC = () => {
       }
 
       resetarForm();
-      buscarProdutos();
+      buscarProdutos(paginaAtual);
       setTimeout(() => setMensagemSucesso(''), 5000);
     } catch (err) {
       const erro = err as AxiosError<ApiErrorResponse>;
@@ -311,7 +347,7 @@ const TelaProdutos: React.FC = () => {
       await api.delete(`/produtos/${modalExcluir.id}`);
       setMensagemSucesso('Produto removido com sucesso.');
       setModalExcluir({ aberto: false, id: null });
-      buscarProdutos();
+      buscarProdutos(paginaAtual);
       setTimeout(() => setMensagemSucesso(''), 5000);
     } catch (err) {
       const erro = err as AxiosError<ApiErrorResponse>;
@@ -364,16 +400,12 @@ const TelaProdutos: React.FC = () => {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-  <div className="space-y-6">
-    {/* Cabeçalho Padronizado */}
-    <header className="mb-6">
-      <h1 className="text-3xl font-serif font-bold text-[#2d3a22] tracking-wide">
-        {editandoId ? 'Editando Produto' : 'Novo/Editar Produto'}
-      </h1>
-      <p className="text-xs text-gray-600 mt-1">
-        Cadastre novos itens no estoque ou atualize dados de produtos existentes.
-      </p>
-    </header>
+    <div className="p-6 md:p-8 bg-[#dcded0] min-h-screen font-sans text-gray-800">
+      <header className="mb-6">
+        <h1 className="text-3xl font-serif font-bold text-[#2d3a22] tracking-wide">
+          {editandoId ? 'Editando Produto' : 'Produtos'}
+        </h1>
+      </header>
 
       {errosValidacao.length > 0 && (
         <div className="mb-6 bg-red-50 border-l-4 border-red-600 p-4 text-red-900 rounded-sm shadow-sm max-w-5xl">
@@ -567,7 +599,7 @@ const TelaProdutos: React.FC = () => {
         </div>
       </div>
 
-      {/* BOTÕES */}
+      {/* BOTÕES DE AÇÃO */}
       <div className="flex justify-end gap-4 mb-12 max-w-5xl">
         <button onClick={resetarForm} className="px-10 py-2 bg-black text-white text-[11px] font-bold uppercase rounded-sm hover:opacity-80">Cancelar</button>
         <button onClick={salvarProduto} className="px-12 py-2 bg-[#4a5d33] text-white text-[11px] font-bold uppercase rounded-sm shadow-md hover:brightness-110">
@@ -575,19 +607,26 @@ const TelaProdutos: React.FC = () => {
         </button>
       </div>
 
-      {/* TABELA */}
-      <section className="bg-white rounded-sm shadow-sm overflow-hidden border-t-4 border-[#4a5d33] max-w-5xl">
+      {/* TABELA PRINCIPAL LIMPA */}
+      <section ref={tabelaRef} className="bg-white rounded-sm shadow-sm overflow-hidden border-t-4 border-[#4a5d33] max-w-5xl">
         <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">
-            {visualizandoExcluidos ? "🗑️ Histórico de Produtos Removidos" : "Produtos Cadastrados"}
-          </h3>
+          <div>
+            <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+              {visualizandoExcluidos ? "🗑️ Histórico de Produtos Removidos" : "Produtos Cadastrados"}
+            </h3>
+            {!visualizandoExcluidos && totalElementos > 0 && (
+              <span className="text-[10px] text-gray-500 font-semibold">
+                Total: {totalElementos} itens (Pág. {paginaAtual + 1} de {totalPaginas})
+              </span>
+            )}
+          </div>
           
           <button
             onClick={() => {
               if (!visualizandoExcluidos) buscarExcluidos();
               setVisualizandoExcluidos(!visualizandoExcluidos);
             }}
-            className={`px-3 py-1 text-[10px] font-bold uppercase rounded-xs transition tracking-wider border ${
+            className={`px-3 py-1 text-[10px] font-bold uppercase rounded-xs transition tracking-wider border cursor-pointer ${
               visualizandoExcluidos 
                 ? 'bg-gray-600 hover:bg-gray-700 text-white border-gray-600' 
                 : 'bg-[#4a5d33] hover:bg-[#3b4b28] text-white border-[#4a5d33]'
@@ -612,7 +651,7 @@ const TelaProdutos: React.FC = () => {
               {(() => {
                 const dadosExibir = visualizandoExcluidos ? produtosExcluidos : listaProdutos;
 
-                if (dadosExibir.length === 0) {
+                if (!Array.isArray(dadosExibir) || dadosExibir.length === 0) {
                   return (
                     <tr>
                       <td colSpan={5} className="p-8 text-center text-gray-400 italic">
@@ -658,9 +697,9 @@ const TelaProdutos: React.FC = () => {
                           </span>
                         ) : (
                           <>
-                            <button onClick={() => prepararEdicao(p)} className="text-blue-600 hover:underline font-bold">EDITAR</button>
-                            <button onClick={() => setModalExcluir({ aberto: true, id: p.id ?? null })} className="text-red-600 hover:underline font-bold">EXCLUIR</button>
-                            <button onClick={() => verDetalhes(p)} className="text-green-700 hover:underline font-bold">DETALHES</button>
+                            <button onClick={() => prepararEdicao(p)} className="text-blue-600 hover:underline font-bold cursor-pointer">EDITAR</button>
+                            <button onClick={() => setModalExcluir({ aberto: true, id: p.id ?? null })} className="text-red-600 hover:underline font-bold cursor-pointer">EXCLUIR</button>
+                            <button onClick={() => verDetalhes(p)} className="text-green-700 hover:underline font-bold cursor-pointer">DETALHES</button>
                           </>
                         )}
                       </td>
@@ -671,13 +710,65 @@ const TelaProdutos: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* BARRA DE PAGINAÇÃO NO RODAPÉ */}
+        {!visualizandoExcluidos && totalPaginas > 1 && (
+          <div className="p-4 bg-gray-50 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+            <span>
+              Página <strong>{paginaAtual + 1}</strong> de <strong>{totalPaginas}</strong>
+            </span>
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => mudarPagina(paginaAtual - 1)}
+                disabled={paginaAtual === 0}
+                className="px-3 py-1.5 border rounded font-bold uppercase bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              >
+                ← Anterior
+              </button>
+
+              {/* Botões Numéricos de Páginas */}
+              {Array.from({ length: totalPaginas }, (_, index) => {
+                if (index === 0 || index === totalPaginas - 1 || Math.abs(index - paginaAtual) <= 1) {
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => mudarPagina(index)}
+                      className={`px-3 py-1.5 border rounded font-bold text-xs cursor-pointer transition ${
+                        paginaAtual === index
+                          ? 'bg-[#4a5d33] text-white border-[#4a5d33]'
+                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  );
+                } else if (
+                  (index === 1 && paginaAtual > 2) ||
+                  (index === totalPaginas - 2 && paginaAtual < totalPaginas - 3)
+                ) {
+                  return <span key={index} className="px-1 text-gray-400">...</span>;
+                }
+                return null;
+              })}
+
+              <button
+                onClick={() => mudarPagina(paginaAtual + 1)}
+                disabled={paginaAtual >= totalPaginas - 1}
+                className="px-3 py-1.5 border rounded font-bold uppercase bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+              >
+                Próxima →
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* MODAL: GRADE ESTOQUE */}
       {modalEstoqueAberto && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-sm border-t-4 border-[#4a5d33] w-full max-w-md max-h-[80vh] flex flex-col p-6 shadow-2xl relative">
-            <button onClick={() => setModalEstoqueAberto(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black font-bold text-xl">×</button>
+            <button onClick={() => setModalEstoqueAberto(false)} className="absolute top-4 right-4 text-gray-400 hover:text-black font-bold text-xl cursor-pointer">×</button>
             <h3 className="font-serif text-lg text-gray-900 border-b pb-2 mb-4">Lançador de Estoque por Variação</h3>
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">
               {produto.coresSelecionadas.map(cor =>
@@ -698,7 +789,7 @@ const TelaProdutos: React.FC = () => {
               )}
             </div>
             <div className="mt-6 pt-4 border-t flex justify-end">
-              <button onClick={() => setModalEstoqueAberto(false)} className="px-6 py-2 bg-[#4a5d33] text-white text-xs font-bold uppercase tracking-wider rounded-sm shadow hover:brightness-110">
+              <button onClick={() => setModalEstoqueAberto(false)} className="px-6 py-2 bg-[#4a5d33] text-white text-xs font-bold uppercase tracking-wider rounded-sm shadow hover:brightness-110 cursor-pointer">
                 Confirmar Grade
               </button>
             </div>
@@ -713,8 +804,8 @@ const TelaProdutos: React.FC = () => {
             <h3 className="font-serif text-lg text-red-700 mb-2">⚠️ Excluir Registro</h3>
             <p className="text-xs text-gray-600 mb-6">Tem certeza de que deseja remover este produto? Esta ação não pode ser desfeita.</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setModalExcluir({ aberto: false, id: null })} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold uppercase text-[10px]">Cancelar</button>
-              <button onClick={confirmarExclusao} className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold uppercase text-[10px]">Confirmar Exclusão</button>
+              <button onClick={() => setModalExcluir({ aberto: false, id: null })} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold uppercase text-[10px] cursor-pointer">Cancelar</button>
+              <button onClick={confirmarExclusao} className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold uppercase text-[10px] cursor-pointer">Confirmar Exclusão</button>
             </div>
           </div>
         </div>
@@ -729,7 +820,7 @@ const TelaProdutos: React.FC = () => {
                 <h3 className="font-serif text-xl text-gray-900 uppercase">{modalDetalhes.dados.nome}</h3>
                 <span className="text-[9px] font-mono uppercase bg-gray-100 text-gray-500 px-1 border">ID: {modalDetalhes.dados.id}</span>
               </div>
-              <button onClick={() => setModalDetalhes({ aberto: false, dados: null })} className="text-gray-400 hover:text-black font-bold text-xl">×</button>
+              <button onClick={() => setModalDetalhes({ aberto: false, dados: null })} className="text-gray-400 hover:text-black font-bold text-xl cursor-pointer">×</button>
             </div>
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs text-gray-700">
               <div className="grid grid-cols-2 gap-2 bg-gray-50 p-3 border">
@@ -754,7 +845,7 @@ const TelaProdutos: React.FC = () => {
               </div>
             </div>
             <div className="mt-6 pt-3 border-t">
-              <button onClick={() => setModalDetalhes({ aberto: false, dados: null })} className="w-full py-2 bg-gray-800 hover:bg-black text-white font-bold uppercase text-xs tracking-wider">
+              <button onClick={() => setModalDetalhes({ aberto: false, dados: null })} className="w-full py-2 bg-gray-800 hover:bg-black text-white font-bold uppercase text-xs tracking-wider cursor-pointer">
                 Fechar
               </button>
             </div>
